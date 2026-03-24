@@ -1,0 +1,98 @@
+import { Router } from 'express'
+import { sequelize } from '../database.js'
+import Pedido from '../models/Pedido.js'
+import PedidoItem from '../models/PedidoItem.js'
+import Producto from '../models/Producto.js'
+import { requireAuth } from './auth.js'
+
+const router = Router()
+
+async function notificarWhatsApp(pedido, items) {
+  const instance = process.env.ULTRAMSG_INSTANCE
+  const token    = process.env.ULTRAMSG_TOKEN
+  const phone    = process.env.WHATSAPP_ADMIN
+  if (!instance || !token || !phone) return
+
+  const lineas = items.map(i => `• ${i.cantidad}x ${i.producto?.nombre || 'Producto'} ($${i.subtotal})`).join('\n')
+  const msg = `🛒 *Nuevo pedido Ceketo*\n👤 ${pedido.nombre} | 📞 ${pedido.telefono}\n📍 ${pedido.localidad || ''}\n💳 ${pedido.metodo_pago}\n\n${lineas}\n\n💰 *Total: $${pedido.total}*`
+
+  try {
+    await fetch(`https://api.ultramsg.com/${instance}/messages/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token, to: phone, body: msg }),
+    })
+  } catch { /* no bloquear si falla WhatsApp */ }
+}
+
+// GET /api/pedidos  (admin)
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    const pedidos = await Pedido.findAll({
+      include: [{
+        model: PedidoItem,
+        as: 'items',
+        include: [{ model: Producto, as: 'producto', attributes: ['id', 'codigo', 'nombre'] }],
+      }],
+      order: [['fecha', 'DESC']],
+      limit: 100,
+    })
+    res.json(pedidos)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/pedidos  (público - checkout)
+router.post('/', async (req, res) => {
+  const t = await sequelize.transaction()
+  try {
+    const { nombre, telefono, email, direccion, localidad, metodo_pago, nota, items } = req.body
+    if (!items?.length) return res.status(400).json({ error: 'Sin productos' })
+
+    let total = 0
+    const itemsVal = []
+    for (const item of items) {
+      const prod = await Producto.findByPk(item.producto_id, { transaction: t })
+      if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado`)
+      if (!prod.activo) throw new Error(`${prod.nombre} no está disponible`)
+      if (prod.stock < parseInt(item.cantidad)) throw new Error(`Stock insuficiente para ${prod.nombre}`)
+      const precio   = parseFloat(item.precio_unit || prod.precio)
+      const subtotal = precio * parseInt(item.cantidad)
+      total += subtotal
+      await prod.update({ stock: prod.stock - parseInt(item.cantidad) }, { transaction: t })
+      itemsVal.push({ producto_id: item.producto_id, cantidad: item.cantidad, precio_unit: precio, subtotal })
+    }
+
+    const pedido = await Pedido.create(
+      { nombre, telefono, email, direccion, localidad, metodo_pago, nota, total },
+      { transaction: t }
+    )
+    await PedidoItem.bulkCreate(
+      itemsVal.map(i => ({ ...i, pedido_id: pedido.id })),
+      { transaction: t }
+    )
+
+    await t.commit()
+    const itemsConProd = itemsVal.map((i, idx) => ({ ...i, producto: { nombre: items[idx]?.nombre || '' } }))
+    notificarWhatsApp(pedido, itemsConProd)
+    res.status(201).json({ ok: true, pedido_id: pedido.id, total })
+  } catch (err) {
+    await t.rollback()
+    res.status(400).json({ error: err.message })
+  }
+})
+
+// PATCH /api/pedidos/:id/estado  (admin)
+router.patch('/:id/estado', requireAuth, async (req, res) => {
+  try {
+    const pedido = await Pedido.findByPk(req.params.id)
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' })
+    await pedido.update({ estado: req.body.estado })
+    res.json(pedido)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+export default router
