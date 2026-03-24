@@ -11,6 +11,7 @@ if (!process.env.JWT_SECRET) {
   process.exit(1)
 }
 
+import bcrypt from 'bcryptjs'
 import { sequelize } from './database.js'
 
 // Modelos
@@ -22,6 +23,7 @@ import './models/VentaItem.js'
 import './models/Pedido.js'
 import './models/PedidoItem.js'
 import './models/Gasto.js'
+import Usuario from './models/Usuario.js'
 
 // Rutas
 import productosRouter   from './routes/productos.js'
@@ -81,6 +83,18 @@ async function start() {
     console.log('✓ MySQL conectado')
     await sequelize.sync({ force: false })
     console.log('✓ Tablas sincronizadas')
+
+    // Crear usuarios iniciales si la tabla está vacía
+    const count = await Usuario.count()
+    if (count === 0) {
+      const hash = (p) => bcrypt.hash(p, 10)
+      await Usuario.bulkCreate([
+        { usuario: 'admin',   password: await hash(process.env.ADMIN_PASS   || 'ceketo2024'),  rol: 'admin'   },
+        { usuario: 'fabrica', password: await hash(process.env.FABRICA_PASS || 'fabrica2024'), rol: 'fabrica' },
+      ])
+      console.log('✓ Usuarios iniciales creados')
+    }
+
     app.listen(PORT, () => {
       console.log(`🚀 CEKETO Backend corriendo en http://localhost:${PORT}`)
     })

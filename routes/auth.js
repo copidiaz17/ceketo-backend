@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
+import Usuario from '../models/Usuario.js'
 
 const router = Router()
 
@@ -12,26 +14,19 @@ const loginLimiter = rateLimit({
   message: { error: 'Demasiados intentos de login. Intentá en 15 minutos.' },
 })
 
-const USERS = [
-  {
-    usuario:  process.env.ADMIN_USER         || 'admin',
-    password: process.env.ADMIN_PASS         || 'ceketo2024',
-    rol:      'admin',
-  },
-  {
-    usuario:  process.env.FABRICA_USER       || 'fabrica',
-    password: process.env.FABRICA_PASS       || 'fabrica2024',
-    rol:      'fabrica',
-  },
-]
-
 // POST /api/auth/login
-router.post('/login', loginLimiter, (req, res) => {
-  const { usuario, password } = req.body
-  const user = USERS.find(u => u.usuario === usuario && u.password === password)
-  if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' })
-  const token = jwt.sign({ usuario: user.usuario, rol: user.rol }, process.env.JWT_SECRET, { expiresIn: '8h' })
-  res.json({ token, usuario: user.usuario, rol: user.rol })
+router.post('/login', loginLimiter, async (req, res) => {
+  try {
+    const { usuario, password } = req.body
+    const user = await Usuario.findOne({ where: { usuario, activo: true } })
+    if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' })
+    const ok = await bcrypt.compare(password, user.password)
+    if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' })
+    const token = jwt.sign({ usuario: user.usuario, rol: user.rol }, process.env.JWT_SECRET, { expiresIn: '8h' })
+    res.json({ token, usuario: user.usuario, rol: user.rol })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // Middleware de autenticación exportado para usar en otras rutas si se necesita
