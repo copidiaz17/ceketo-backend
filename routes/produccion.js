@@ -97,7 +97,15 @@ router.post('/', async (req, res) => {
 router.delete('/lote/:lote_id', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const registros = await Produccion.findAll({ where: { lote_id: req.params.lote_id }, transaction: t })
+    const loteParam = req.params.lote_id
+    let where = {}
+    if (loteParam.startsWith('fecha-')) {
+      const fecha = loteParam.replace('fecha-', '')
+      where = { fecha, lote_id: null }
+    } else {
+      where = { lote_id: loteParam }
+    }
+    const registros = await Produccion.findAll({ where, transaction: t })
     if (!registros.length) { await t.rollback(); return res.status(404).json({ error: 'Lote no encontrado' }) }
 
     for (const reg of registros) {
