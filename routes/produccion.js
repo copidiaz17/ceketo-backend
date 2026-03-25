@@ -64,4 +64,25 @@ router.post('/', async (req, res) => {
   }
 })
 
+// DELETE /api/produccion/:id — elimina un registro y revierte el stock
+router.delete('/:id', async (req, res) => {
+  const t = await sequelize.transaction()
+  try {
+    const registro = await Produccion.findByPk(req.params.id, { transaction: t })
+    if (!registro) { await t.rollback(); return res.status(404).json({ error: 'Registro no encontrado' }) }
+
+    const producto = await Producto.findByPk(registro.producto_id, { transaction: t })
+    if (producto) {
+      await producto.update({ stock: Math.max(0, producto.stock - parseInt(registro.cantidad)) }, { transaction: t })
+    }
+
+    await registro.destroy({ transaction: t })
+    await t.commit()
+    res.json({ ok: true })
+  } catch (err) {
+    await t.rollback()
+    res.status(500).json({ error: err.message })
+  }
+})
+
 export default router
