@@ -4,6 +4,7 @@ import Producto from './Producto.js'
 
 const Produccion = sequelize.define('Produccion', {
   id:          { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  lote_id:     { type: DataTypes.STRING(36), allowNull: true },
   producto_id: { type: DataTypes.INTEGER, references: { model: Producto, key: 'id' } },
   cantidad:    { type: DataTypes.INTEGER, allowNull: false },
   fecha:       { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW },
