@@ -8,6 +8,7 @@ const Venta = sequelize.define('Venta', {
   total:        { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   nota:         { type: DataTypes.STRING(500) },
   metodo_pago:  { type: DataTypes.ENUM('efectivo', 'transferencia', 'debito', 'credito', 'qr'), allowNull: true },
+  descuento:    { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },
 }, { tableName: 'ventas', timestamps: false })
 
 export default Venta

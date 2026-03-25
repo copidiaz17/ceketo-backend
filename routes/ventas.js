@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const { items, tipo = 'local', nota, metodo_pago } = req.body
+    const { items, tipo = 'local', nota, metodo_pago, descuento = 0 } = req.body
     // items = [{ producto_id, cantidad, precio_unit }]
     if (!items || !items.length) return res.status(400).json({ error: 'Sin items' })
 
@@ -55,14 +55,16 @@ router.post('/', async (req, res) => {
       itemsValidados.push({ producto_id: item.producto_id, cantidad: item.cantidad, precio_unit: precio, subtotal })
     }
 
-    const venta = await Venta.create({ tipo, total, nota: nota || null, metodo_pago: metodo_pago || null }, { transaction: t })
+    const pct = Math.min(Math.max(parseFloat(descuento) || 0, 0), 100)
+    const totalFinal = parseFloat((total - (total * pct / 100)).toFixed(2))
+    const venta = await Venta.create({ tipo, total: totalFinal, nota: nota || null, metodo_pago: metodo_pago || null, descuento: pct }, { transaction: t })
     await VentaItem.bulkCreate(
       itemsValidados.map(i => ({ ...i, venta_id: venta.id })),
       { transaction: t }
     )
 
     await t.commit()
-    res.status(201).json({ ok: true, venta_id: venta.id, total })
+    res.status(201).json({ ok: true, venta_id: venta.id, total: totalFinal })
   } catch (err) {
     await t.rollback()
     res.status(400).json({ error: err.message })
