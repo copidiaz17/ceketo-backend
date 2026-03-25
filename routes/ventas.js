@@ -20,6 +20,7 @@ router.get('/', async (req, res) => {
           model: Producto,
           as: 'producto',
           attributes: ['id', 'codigo', 'nombre'],
+          include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
         }],
       }],
       order: [['fecha', 'DESC']],
