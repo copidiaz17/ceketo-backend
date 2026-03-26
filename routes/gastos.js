@@ -96,7 +96,7 @@ router.get('/resumen', async (req, res) => {
 // ── POST /api/gastos ─────────────────────────────────────────────
 router.post('/', upload.single('comprobante'), async (req, res) => {
   try {
-    const { fecha, categoria, descripcion, monto, proveedor } = req.body
+    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva } = req.body
     if (!fecha || !categoria || !descripcion || !monto)
       return res.status(400).json({ error: 'Faltan campos obligatorios' })
     if (!CATEGORIAS.includes(categoria))
@@ -106,11 +106,19 @@ router.post('/', upload.single('comprobante'), async (req, res) => {
       ? `/uploads/comprobantes/${req.file.filename}`
       : null
 
+    const montoNum     = parseFloat(monto)
+    const esFactura    = es_factura === 'true' || es_factura === true
+    const alicuota     = esFactura && alicuota_iva ? parseFloat(alicuota_iva) : null
+    const ivaMonto     = alicuota ? parseFloat((montoNum * alicuota / (100 + alicuota)).toFixed(2)) : null
+
     const gasto = await Gasto.create({
       fecha, categoria, descripcion,
-      monto: parseFloat(monto),
+      monto: montoNum,
       proveedor: proveedor || null,
       comprobante,
+      es_factura: esFactura,
+      alicuota_iva: alicuota,
+      iva_monto: ivaMonto,
     })
     res.status(201).json(gasto)
   } catch (err) {
@@ -124,23 +132,30 @@ router.put('/:id', upload.single('comprobante'), async (req, res) => {
     const gasto = await Gasto.findByPk(req.params.id)
     if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' })
 
-    const { fecha, categoria, descripcion, monto, proveedor } = req.body
+    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva } = req.body
     if (categoria && !CATEGORIAS.includes(categoria))
       return res.status(400).json({ error: 'Categoría inválida' })
 
-    // Si se subió nuevo comprobante, borrar el anterior
     if (req.file && gasto.comprobante) {
       const old = join(__dirname, '../public', gasto.comprobante)
       if (existsSync(old)) unlinkSync(old)
     }
 
+    const montoNum  = monto ? parseFloat(monto) : gasto.monto
+    const esFactura = es_factura !== undefined ? (es_factura === 'true' || es_factura === true) : gasto.es_factura
+    const alicuota  = esFactura && alicuota_iva ? parseFloat(alicuota_iva) : (esFactura ? gasto.alicuota_iva : null)
+    const ivaMonto  = alicuota ? parseFloat((montoNum * alicuota / (100 + alicuota)).toFixed(2)) : null
+
     await gasto.update({
-      fecha:       fecha       || gasto.fecha,
-      categoria:   categoria   || gasto.categoria,
-      descripcion: descripcion || gasto.descripcion,
-      monto:       monto       ? parseFloat(monto) : gasto.monto,
-      proveedor:   proveedor !== undefined ? (proveedor || null) : gasto.proveedor,
-      comprobante: req.file ? `/uploads/comprobantes/${req.file.filename}` : gasto.comprobante,
+      fecha:        fecha       || gasto.fecha,
+      categoria:    categoria   || gasto.categoria,
+      descripcion:  descripcion || gasto.descripcion,
+      monto:        montoNum,
+      proveedor:    proveedor !== undefined ? (proveedor || null) : gasto.proveedor,
+      comprobante:  req.file ? `/uploads/comprobantes/${req.file.filename}` : gasto.comprobante,
+      es_factura:   esFactura,
+      alicuota_iva: alicuota,
+      iva_monto:    ivaMonto,
     })
     res.json(gasto)
   } catch (err) {
