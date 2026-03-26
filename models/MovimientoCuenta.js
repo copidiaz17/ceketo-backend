@@ -10,6 +10,7 @@ const MovimientoCuenta = sequelize.define('MovimientoCuenta', {
   concepto:   { type: DataTypes.STRING(500), allowNull: false },
   monto:      { type: DataTypes.DECIMAL(12, 2), allowNull: false },
   gasto_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia al gasto auto-creado
+  venta_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia a la venta auto-creada
 }, { tableName: 'movimientos_cuenta', timestamps: true })
 
 CuentaCorriente.hasMany(MovimientoCuenta, { foreignKey: 'cuenta_id', as: 'movimientos' })

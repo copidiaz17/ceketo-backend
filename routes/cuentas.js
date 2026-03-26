@@ -3,6 +3,9 @@ import { sequelize } from '../database.js'
 import CuentaCorriente from '../models/CuentaCorriente.js'
 import MovimientoCuenta from '../models/MovimientoCuenta.js'
 import Gasto from '../models/Gasto.js'
+import Venta from '../models/Venta.js'
+import VentaItem from '../models/VentaItem.js'
+import Producto from '../models/Producto.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -107,15 +110,41 @@ router.post('/:id/movimientos', async (req, res) => {
     const cuenta = await CuentaCorriente.findByPk(req.params.id, { transaction: t })
     if (!cuenta) { await t.rollback(); return res.status(404).json({ error: 'No encontrada' }) }
 
-    const { fecha, tipo, concepto, monto } = req.body
+    const { fecha, tipo, concepto, monto, items } = req.body
     if (!fecha || !tipo || !concepto || !monto) {
       await t.rollback()
       return res.status(400).json({ error: 'Faltan campos requeridos' })
     }
 
     let gasto_id = null
+    let venta_id = null
 
-    // Si es pago a proveedor → crear gasto automáticamente
+    // Cargo de cliente con productos → crear Venta y descontar stock
+    if (cuenta.tipo === 'cliente' && tipo === 'cargo' && items && items.length) {
+      const venta = await Venta.create({
+        fecha,
+        tipo: 'local',
+        total: monto,
+        metodo_pago: 'cuenta_corriente',
+        nota: `Cta. cte. — ${cuenta.nombre}${concepto ? ': ' + concepto : ''}`,
+      }, { transaction: t })
+
+      for (const item of items) {
+        const producto = await Producto.findByPk(item.producto_id, { transaction: t })
+        if (!producto) throw new Error(`Producto ${item.producto_id} no encontrado`)
+        await VentaItem.create({
+          venta_id:    venta.id,
+          producto_id: item.producto_id,
+          cantidad:    item.cantidad,
+          precio_unit: item.precio_unit,
+          subtotal:    item.subtotal,
+        }, { transaction: t })
+        await producto.update({ stock: Math.max(0, producto.stock - item.cantidad) }, { transaction: t })
+      }
+      venta_id = venta.id
+    }
+
+    // Pago a proveedor → crear gasto automáticamente
     if (cuenta.tipo === 'proveedor' && tipo === 'pago') {
       const gasto = await Gasto.create({
         fecha,
@@ -128,12 +157,12 @@ router.post('/:id/movimientos', async (req, res) => {
     }
 
     const mov = await MovimientoCuenta.create(
-      { cuenta_id: req.params.id, fecha, tipo, concepto, monto, gasto_id },
+      { cuenta_id: req.params.id, fecha, tipo, concepto, monto, gasto_id, venta_id },
       { transaction: t }
     )
 
     await t.commit()
-    res.status(201).json({ ...mov.toJSON(), gasto_creado: gasto_id !== null })
+    res.status(201).json({ ...mov.toJSON(), gasto_creado: gasto_id !== null, venta_creada: venta_id !== null })
   } catch (err) {
     await t.rollback()
     res.status(500).json({ error: err.message })
@@ -150,9 +179,20 @@ router.delete('/:id/movimientos/:movId', async (req, res) => {
     })
     if (!mov) { await t.rollback(); return res.status(404).json({ error: 'Movimiento no encontrado' }) }
 
-    // Si tenía gasto asociado, eliminarlo también
+    // Si tenía gasto asociado, eliminarlo
     if (mov.gasto_id) {
       await Gasto.destroy({ where: { id: mov.gasto_id }, transaction: t })
+    }
+
+    // Si tenía venta asociada, revertir stock y eliminar
+    if (mov.venta_id) {
+      const ventaItems = await VentaItem.findAll({ where: { venta_id: mov.venta_id }, transaction: t })
+      for (const vi of ventaItems) {
+        const producto = await Producto.findByPk(vi.producto_id, { transaction: t })
+        if (producto) await producto.update({ stock: producto.stock + vi.cantidad }, { transaction: t })
+      }
+      await VentaItem.destroy({ where: { venta_id: mov.venta_id }, transaction: t })
+      await Venta.destroy({ where: { id: mov.venta_id }, transaction: t })
     }
 
     await mov.destroy({ transaction: t })
