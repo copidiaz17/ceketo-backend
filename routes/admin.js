@@ -15,10 +15,14 @@ router.use(requireAuth)
 // GET /api/admin/dashboard
 router.get('/dashboard', async (req, res) => {
   try {
-    const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
-    const manana = new Date(hoy)
-    manana.setDate(manana.getDate() + 1)
+    // Argentina = UTC-3. Calculamos el "hoy" en zona Argentina.
+    const nowUTC = new Date()
+    const ARG_OFFSET_MS = 3 * 60 * 60 * 1000
+    // Fecha de hoy en Argentina (string YYYY-MM-DD)
+    const argTodayStr = new Date(nowUTC.getTime() - ARG_OFFSET_MS).toISOString().slice(0, 10)
+    // Medianoche Argentina en UTC = argTodayStr T03:00:00 UTC
+    const hoy    = new Date(argTodayStr + 'T03:00:00.000Z')
+    const manana = new Date(hoy.getTime() + 24 * 60 * 60 * 1000)
 
     // Ventas de hoy
     const ventasHoy = await Venta.findAll({
@@ -40,20 +44,19 @@ router.get('/dashboard', async (req, res) => {
       limit: 10,
     })
 
-    // Ventas últimos 7 días (para gráfico)
-    const hace7 = new Date()
-    hace7.setDate(hace7.getDate() - 6)
-    hace7.setHours(0, 0, 0, 0)
+    // Ventas últimos 7 días (para gráfico) — agrupamos por fecha Argentina (UTC-3)
+    const hace7Str = new Date(nowUTC.getTime() - ARG_OFFSET_MS - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const hace7    = new Date(hace7Str + 'T03:00:00.000Z')
 
     const ventasSemana = await Venta.findAll({
       where: { fecha: { [Op.gte]: hace7 } },
       attributes: [
-        [fn('DATE', col('fecha')), 'dia'],
+        [fn('DATE', fn('CONVERT_TZ', col('fecha'), '+00:00', '-03:00')), 'dia'],
         [fn('COUNT', col('id')), 'cantidad'],
         [fn('SUM', col('total')), 'total'],
       ],
-      group: [fn('DATE', col('fecha'))],
-      order: [[fn('DATE', col('fecha')), 'ASC']],
+      group: [fn('DATE', fn('CONVERT_TZ', col('fecha'), '+00:00', '-03:00'))],
+      order: [[fn('DATE', fn('CONVERT_TZ', col('fecha'), '+00:00', '-03:00')), 'ASC']],
       raw: true,
     })
 
