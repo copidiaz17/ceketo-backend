@@ -4,6 +4,8 @@ import Venta from '../models/Venta.js'
 import VentaItem from '../models/VentaItem.js'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
+import MovimientoCuenta from '../models/MovimientoCuenta.js'
+import CuentaCorriente from '../models/CuentaCorriente.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -36,7 +38,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const { items, tipo = 'local', nota, metodo_pago, descuento = 0, fecha } = req.body
+    const { items, tipo = 'local', nota, metodo_pago, descuento = 0, fecha, cuenta_id } = req.body
     // items = [{ producto_id, cantidad, precio_unit }]
     if (!items || !items.length) return res.status(400).json({ error: 'Sin items' })
 
@@ -63,6 +65,24 @@ router.post('/', async (req, res) => {
       itemsValidados.map(i => ({ ...i, venta_id: venta.id })),
       { transaction: t }
     )
+
+    // Si la venta es a cuenta corriente, registrar el movimiento en la cuenta del cliente
+    if (metodo_pago === 'cuenta_corriente' && cuenta_id) {
+      const cuenta = await CuentaCorriente.findByPk(cuenta_id, { transaction: t })
+      if (cuenta && cuenta.tipo === 'cliente') {
+        const conceptoItems = itemsValidados.length === 1
+          ? `Venta #${venta.id}`
+          : `Venta #${venta.id} (${itemsValidados.length} productos)`
+        await MovimientoCuenta.create({
+          cuenta_id,
+          fecha:    venta.fecha,
+          tipo:     'cargo',
+          concepto: nota || conceptoItems,
+          monto:    totalFinal,
+          venta_id: venta.id,
+        }, { transaction: t })
+      }
+    }
 
     await t.commit()
     res.status(201).json({ ok: true, venta_id: venta.id, total: totalFinal })
