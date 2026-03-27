@@ -5,6 +5,8 @@ import Caja from '../models/Caja.js'
 import MovimientoCaja from '../models/MovimientoCaja.js'
 import Venta from '../models/Venta.js'
 import Gasto from '../models/Gasto.js'
+import MovimientoCuenta from '../models/MovimientoCuenta.js'
+import CuentaCorriente from '../models/CuentaCorriente.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -163,6 +165,25 @@ async function _resumenCaja(caja) {
     const m = g.metodo_pago || 'sin_metodo'
     gastosPorMetodo[m] = (gastosPorMetodo[m] || 0) + parseFloat(g.monto)
     totalGastos += parseFloat(g.monto)
+  }
+
+  // Cobros de clientes en cuentas corrientes (pagos que recibimos de clientes, con método de pago)
+  // Estos NO crean una Venta — solo MovimientoCuenta tipo='pago' en cuentas de tipo='cliente'
+  const cobrosCtaCte = await MovimientoCuenta.findAll({
+    where: {
+      tipo: 'pago',
+      createdAt: { [Op.between]: [desde, hasta] },
+      metodo_pago: { [Op.not]: null },
+      venta_id: null, // excluir los que ya tienen venta asociada
+    },
+    include: [{ model: CuentaCorriente, as: 'cuenta', attributes: ['tipo'], where: { tipo: 'cliente' } }],
+    attributes: ['metodo_pago', 'monto'],
+  })
+
+  for (const c of cobrosCtaCte) {
+    const m = c.metodo_pago
+    ventasPorMetodo[m] = (ventasPorMetodo[m] || 0) + parseFloat(c.monto)
+    totalVentas += parseFloat(c.monto)
   }
 
   // Movimientos manuales de caja

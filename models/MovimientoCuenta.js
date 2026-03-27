@@ -9,6 +9,7 @@ const MovimientoCuenta = sequelize.define('MovimientoCuenta', {
   tipo:       { type: DataTypes.ENUM('cargo', 'pago'), allowNull: false },
   concepto:   { type: DataTypes.STRING(500), allowNull: false },
   monto:      { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  metodo_pago:{ type: DataTypes.ENUM('efectivo', 'transferencia', 'debito', 'credito', 'qr'), allowNull: true },
   gasto_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia al gasto auto-creado
   venta_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia a la venta auto-creada
 }, { tableName: 'movimientos_cuenta', timestamps: true })

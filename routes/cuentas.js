@@ -110,7 +110,7 @@ router.post('/:id/movimientos', async (req, res) => {
     const cuenta = await CuentaCorriente.findByPk(req.params.id, { transaction: t })
     if (!cuenta) { await t.rollback(); return res.status(404).json({ error: 'No encontrada' }) }
 
-    const { fecha, tipo, concepto, monto, items } = req.body
+    const { fecha, tipo, concepto, monto, items, metodo_pago } = req.body
     if (!fecha || !tipo || !concepto || !monto) {
       await t.rollback()
       return res.status(400).json({ error: 'Faltan campos requeridos' })
@@ -146,18 +146,22 @@ router.post('/:id/movimientos', async (req, res) => {
 
     // Pago a proveedor → crear gasto automáticamente
     if (cuenta.tipo === 'proveedor' && tipo === 'pago') {
+      const METODOS_VALIDOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr']
       const gasto = await Gasto.create({
         fecha,
         categoria: 'Materia Prima',
         descripcion: `Pago cta. cte. — ${cuenta.nombre}: ${concepto}`,
         monto,
         proveedor: cuenta.nombre,
+        metodo_pago: metodo_pago && METODOS_VALIDOS.includes(metodo_pago) ? metodo_pago : null,
       }, { transaction: t })
       gasto_id = gasto.id
     }
 
+    const METODOS_VALIDOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr']
     const mov = await MovimientoCuenta.create(
-      { cuenta_id: req.params.id, fecha, tipo, concepto, monto, gasto_id, venta_id },
+      { cuenta_id: req.params.id, fecha, tipo, concepto, monto, gasto_id, venta_id,
+        metodo_pago: metodo_pago && METODOS_VALIDOS.includes(metodo_pago) ? metodo_pago : null },
       { transaction: t }
     )
 
