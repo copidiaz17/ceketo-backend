@@ -88,7 +88,7 @@ async function start() {
   try {
     await sequelize.authenticate()
     console.log('✓ MySQL conectado')
-    await sequelize.sync({ alter: true })
+    await sequelize.sync()
     console.log('✓ Tablas sincronizadas')
 
     app.listen(PORT, () => {
