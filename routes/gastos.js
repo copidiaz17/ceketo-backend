@@ -96,7 +96,7 @@ router.get('/resumen', async (req, res) => {
 // ── POST /api/gastos ─────────────────────────────────────────────
 router.post('/', upload.single('comprobante'), async (req, res) => {
   try {
-    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva } = req.body
+    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva, metodo_pago } = req.body
     if (!fecha || !categoria || !descripcion || !monto)
       return res.status(400).json({ error: 'Faltan campos obligatorios' })
     if (!CATEGORIAS.includes(categoria))
@@ -111,11 +111,13 @@ router.post('/', upload.single('comprobante'), async (req, res) => {
     const alicuota     = esFactura && alicuota_iva ? parseFloat(alicuota_iva) : null
     const ivaMonto     = alicuota ? parseFloat((montoNum * alicuota / (100 + alicuota)).toFixed(2)) : null
 
+    const METODOS_VALIDOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr']
     const gasto = await Gasto.create({
       fecha, categoria, descripcion,
       monto: montoNum,
       proveedor: proveedor || null,
       comprobante,
+      metodo_pago: metodo_pago && METODOS_VALIDOS.includes(metodo_pago) ? metodo_pago : null,
       es_factura: esFactura,
       alicuota_iva: alicuota,
       iva_monto: ivaMonto,
@@ -132,9 +134,10 @@ router.put('/:id', upload.single('comprobante'), async (req, res) => {
     const gasto = await Gasto.findByPk(req.params.id)
     if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' })
 
-    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva } = req.body
+    const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva, metodo_pago } = req.body
     if (categoria && !CATEGORIAS.includes(categoria))
       return res.status(400).json({ error: 'Categoría inválida' })
+    const METODOS_VALIDOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr']
 
     if (req.file && gasto.comprobante) {
       const old = join(__dirname, '../public', gasto.comprobante)
@@ -153,6 +156,7 @@ router.put('/:id', upload.single('comprobante'), async (req, res) => {
       monto:        montoNum,
       proveedor:    proveedor !== undefined ? (proveedor || null) : gasto.proveedor,
       comprobante:  req.file ? `/uploads/comprobantes/${req.file.filename}` : gasto.comprobante,
+      metodo_pago:  metodo_pago !== undefined ? (METODOS_VALIDOS.includes(metodo_pago) ? metodo_pago : null) : gasto.metodo_pago,
       es_factura:   esFactura,
       alicuota_iva: alicuota,
       iva_monto:    ivaMonto,

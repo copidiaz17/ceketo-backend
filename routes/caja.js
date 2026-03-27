@@ -4,6 +4,7 @@ import { sequelize } from '../database.js'
 import Caja from '../models/Caja.js'
 import MovimientoCaja from '../models/MovimientoCaja.js'
 import Venta from '../models/Venta.js'
+import Gasto from '../models/Gasto.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -55,11 +56,12 @@ router.post('/abrir', async (req, res) => {
     const abierta = await Caja.findOne({ where: { estado: 'abierta' } })
     if (abierta) return res.status(400).json({ error: 'Ya hay una caja abierta', caja_id: abierta.id })
 
-    const { saldo_inicial = 0, usuario } = req.body
+    const { saldo_inicial = 0, saldo_billetera_inicial = 0, usuario } = req.body
     const caja = await Caja.create({
-      saldo_inicial: parseFloat(saldo_inicial) || 0,
-      usuario:       usuario || null,
-      estado:        'abierta',
+      saldo_inicial:           parseFloat(saldo_inicial) || 0,
+      saldo_billetera_inicial: parseFloat(saldo_billetera_inicial) || 0,
+      usuario:                 usuario || null,
+      estado:                  'abierta',
     })
     res.status(201).json(caja)
   } catch (err) {
@@ -114,11 +116,13 @@ router.post('/:id/cerrar', async (req, res) => {
     const { arqueo_efectivo, nota_cierre } = req.body
 
     const resumen = await _resumenCaja(caja)
+    const { arqueo_billetera } = req.body
     await caja.update({
-      estado:          'cerrada',
-      fecha_cierre:    new Date(),
-      arqueo_efectivo: arqueo_efectivo !== undefined ? parseFloat(arqueo_efectivo) : null,
-      nota_cierre:     nota_cierre || null,
+      estado:           'cerrada',
+      fecha_cierre:     new Date(),
+      arqueo_efectivo:  arqueo_efectivo !== undefined ? parseFloat(arqueo_efectivo) : null,
+      arqueo_billetera: arqueo_billetera !== undefined ? parseFloat(arqueo_billetera) : null,
+      nota_cierre:      nota_cierre || null,
     })
 
     res.json({ ok: true, caja, resumen })
@@ -129,7 +133,6 @@ router.post('/:id/cerrar', async (req, res) => {
 
 // ── Helper interno ───────────────────────────────────────────────
 async function _resumenCaja(caja) {
-  // Período de la caja
   const desde = caja.fecha_apertura
   const hasta = caja.fecha_cierre || new Date()
 
@@ -139,7 +142,7 @@ async function _resumenCaja(caja) {
     attributes: ['metodo_pago', 'total'],
   })
 
-  // Agrupar por método de pago
+  // Agrupar ventas por método de pago
   const ventasPorMetodo = {}
   let totalVentas = 0
   for (const v of ventas) {
@@ -148,7 +151,21 @@ async function _resumenCaja(caja) {
     totalVentas += parseFloat(v.total)
   }
 
-  // Movimientos manuales
+  // Gastos en el período agrupados por método de pago
+  const gastos = await Gasto.findAll({
+    where: { fecha: { [Op.between]: [desde.toISOString().split('T')[0], hasta.toISOString().split('T')[0]] } },
+    attributes: ['metodo_pago', 'monto'],
+  })
+
+  const gastosPorMetodo = {}
+  let totalGastos = 0
+  for (const g of gastos) {
+    const m = g.metodo_pago || 'sin_metodo'
+    gastosPorMetodo[m] = (gastosPorMetodo[m] || 0) + parseFloat(g.monto)
+    totalGastos += parseFloat(g.monto)
+  }
+
+  // Movimientos manuales de caja
   const movimientos = await MovimientoCaja.findAll({
     where: { caja_id: caja.id },
     order: [['createdAt', 'ASC']],
@@ -163,16 +180,27 @@ async function _resumenCaja(caja) {
 
   // Saldo teórico en efectivo
   const efectivoVentas = ventasPorMetodo['efectivo'] || 0
-  const saldoTeorico = parseFloat(caja.saldo_inicial) + efectivoVentas + totalIngresos - totalEgresos
+  const efectivoGastos = gastosPorMetodo['efectivo'] || 0
+  const saldoTeorico = parseFloat(caja.saldo_inicial) + efectivoVentas - efectivoGastos + totalIngresos - totalEgresos
+
+  // Saldo teórico billetera virtual
+  const transferenciaVentas = (ventasPorMetodo['transferencia'] || 0)
+  const transferenciaGastos = (gastosPorMetodo['transferencia'] || 0)
+  const saldoBilleteraFinal = parseFloat(caja.saldo_billetera_inicial) + transferenciaVentas - transferenciaGastos
 
   return {
     ventas: ventas.length,
     totalVentas,
     ventasPorMetodo,
+    gastosPorMetodo,
+    totalGastos,
     movimientos,
     totalIngresos,
     totalEgresos,
     saldoTeorico,
+    saldoBilleteraFinal,
+    transferenciaVentas,
+    transferenciaGastos,
   }
 }
 
