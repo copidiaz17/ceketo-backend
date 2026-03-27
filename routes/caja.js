@@ -183,10 +183,11 @@ async function _resumenCaja(caja) {
   const efectivoGastos = gastosPorMetodo['efectivo'] || 0
   const saldoTeorico = parseFloat(caja.saldo_inicial) + efectivoVentas - efectivoGastos + totalIngresos - totalEgresos
 
-  // Saldo teórico billetera virtual
-  const transferenciaVentas = (ventasPorMetodo['transferencia'] || 0)
-  const transferenciaGastos = (gastosPorMetodo['transferencia'] || 0)
-  const saldoBilleteraFinal = parseFloat(caja.saldo_billetera_inicial) + transferenciaVentas - transferenciaGastos
+  // Saldo teórico billetera virtual (todos los métodos digitales)
+  const METODOS_DIGITALES = ['transferencia', 'qr', 'debito', 'credito']
+  const billeteraVentas = METODOS_DIGITALES.reduce((acc, m) => acc + (ventasPorMetodo[m] || 0), 0)
+  const billeteraGastos = METODOS_DIGITALES.reduce((acc, m) => acc + (gastosPorMetodo[m] || 0), 0)
+  const saldoBilleteraFinal = parseFloat(caja.saldo_billetera_inicial) + billeteraVentas - billeteraGastos
 
   return {
     ventas: ventas.length,
@@ -199,8 +200,8 @@ async function _resumenCaja(caja) {
     totalEgresos,
     saldoTeorico,
     saldoBilleteraFinal,
-    transferenciaVentas,
-    transferenciaGastos,
+    billeteraVentas,
+    billeteraGastos,
   }
 }
 
