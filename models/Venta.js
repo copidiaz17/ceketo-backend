@@ -7,7 +7,7 @@ const Venta = sequelize.define('Venta', {
   tipo:         { type: DataTypes.ENUM('online', 'local'), defaultValue: 'local' },
   total:        { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   nota:         { type: DataTypes.STRING(500) },
-  metodo_pago:  { type: DataTypes.ENUM('efectivo', 'transferencia', 'debito', 'credito', 'qr'), allowNull: true },
+  metodo_pago:  { type: DataTypes.ENUM('efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cuenta_corriente'), allowNull: true },
   descuento:    { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },
 }, { tableName: 'ventas', timestamps: false })
 
