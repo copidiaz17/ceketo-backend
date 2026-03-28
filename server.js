@@ -26,6 +26,7 @@ import './models/CuentaCorriente.js'
 import './models/MovimientoCuenta.js'
 import './models/Caja.js'
 import './models/MovimientoCaja.js'
+import './models/AjusteStock.js'
 import Usuario from './models/Usuario.js'
 
 // Rutas

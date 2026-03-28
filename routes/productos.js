@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { Op } from 'sequelize'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
+import AjusteStock from '../models/AjusteStock.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -145,6 +146,65 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (stock         !== undefined) updates.stock         = stock
     await producto.update(updates)
     res.json(producto)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/productos/:id/ajuste-stock — edición manual de stock con registro
+router.put('/:id/ajuste-stock', requireAuth, async (req, res) => {
+  try {
+    const producto = await Producto.findByPk(req.params.id)
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado' })
+
+    const { stock_nuevo, observacion, usuario } = req.body
+    if (stock_nuevo === undefined || stock_nuevo === null || stock_nuevo === '')
+      return res.status(400).json({ error: 'stock_nuevo es requerido' })
+
+    const stockAnterior = producto.stock
+    const stockNuevo    = parseInt(stock_nuevo)
+    const diferencia    = stockNuevo - stockAnterior
+
+    await producto.update({ stock: stockNuevo })
+
+    const ajuste = await AjusteStock.create({
+      producto_id:    producto.id,
+      stock_anterior: stockAnterior,
+      stock_nuevo:    stockNuevo,
+      diferencia,
+      observacion:    observacion || null,
+      usuario:        usuario || null,
+    })
+
+    res.json({ ok: true, ajuste, stock: stockNuevo })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/productos/:id/ajustes — historial de ajustes de un producto
+router.get('/:id/ajustes', requireAuth, async (req, res) => {
+  try {
+    const ajustes = await AjusteStock.findAll({
+      where: { producto_id: req.params.id },
+      order: [['createdAt', 'DESC']],
+      limit: 50,
+    })
+    res.json(ajustes)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/productos/ajustes/todos — historial global de ajustes
+router.get('/ajustes/todos', requireAuth, async (req, res) => {
+  try {
+    const ajustes = await AjusteStock.findAll({
+      include: [{ model: Producto, as: 'producto', attributes: ['id', 'codigo', 'nombre'] }],
+      order: [['createdAt', 'DESC']],
+      limit: 100,
+    })
+    res.json(ajustes)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
