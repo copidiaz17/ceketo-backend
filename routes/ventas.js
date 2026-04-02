@@ -60,7 +60,10 @@ router.post('/', async (req, res) => {
 
     const pct = Math.min(Math.max(parseFloat(descuento) || 0, 0), 100)
     const totalFinal = parseFloat((total - (total * pct / 100)).toFixed(2))
-    const venta = await Venta.create({ tipo, total: totalFinal, nota: nota || null, metodo_pago: metodo_pago || null, descuento: pct, ...(fecha ? { fecha: new Date(fecha + 'T12:00:00') } : {}) }, { transaction: t })
+    const fechaVenta = fecha
+      ? new Date(fecha + 'T12:00:00-03:00')
+      : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const venta = await Venta.create({ tipo, total: totalFinal, nota: nota || null, metodo_pago: metodo_pago || null, descuento: pct, fecha: fechaVenta }, { transaction: t })
     await VentaItem.bulkCreate(
       itemsValidados.map(i => ({ ...i, venta_id: venta.id })),
       { transaction: t }
