@@ -12,6 +12,7 @@ export const sequelize = new Sequelize(
     host:    process.env.DB_HOST,
     port:    parseInt(process.env.DB_PORT || '3306'),
     dialect: 'mysql',
+    timezone: '+00:00',
     logging: false,
     dialectOptions: sslEnabled
       ? { ssl: { rejectUnauthorized: false }, connectTimeout: 30000 }
