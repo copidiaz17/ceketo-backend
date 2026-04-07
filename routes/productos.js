@@ -135,7 +135,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   try {
     const producto = await Producto.findByPk(req.params.id)
     if (!producto) return res.status(404).json({ error: 'Producto no encontrado' })
-    const { nombre, precio, activo, codigo, codigo_barras, categoria_id, stock } = req.body
+    const { nombre, precio, activo, codigo, codigo_barras, categoria_id } = req.body
     const updates = {}
     if (nombre        !== undefined) updates.nombre        = nombre
     if (precio        !== undefined) updates.precio        = precio
@@ -143,7 +143,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (codigo        !== undefined) updates.codigo        = codigo
     if (codigo_barras !== undefined) updates.codigo_barras = codigo_barras
     if (categoria_id  !== undefined) updates.categoria_id  = categoria_id
-    if (stock         !== undefined) updates.stock         = stock
+    // stock NO se actualiza aquí — solo via /ajuste-stock o produccion
     await producto.update(updates)
     res.json(producto)
   } catch (err) {
