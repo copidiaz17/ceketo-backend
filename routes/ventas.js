@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
           include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
         }],
       }],
-      order: [['fecha', 'DESC']],
+      order: [['fecha', 'DESC'], ['id', 'DESC']],
       limit: 100,
     })
     res.json(ventas)
