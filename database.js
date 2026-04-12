@@ -17,6 +17,12 @@ export const sequelize = new Sequelize(
     dialectOptions: sslEnabled
       ? { ssl: { rejectUnauthorized: false }, connectTimeout: 30000 }
       : { connectTimeout: 30000 },
-    pool: { max: 5, min: 1, acquire: 60000, idle: 30000 },
+    pool: {
+      max: 5,
+      min: 1,
+      acquire: 30000,   // reducido: falla rápido si no hay conexión disponible
+      idle: 600000,     // 10 minutos: mantiene la conexión viva más tiempo
+      evict: 10000,     // cada 10s verifica y elimina conexiones muertas
+    },
   }
 )

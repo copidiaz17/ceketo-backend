@@ -101,4 +101,13 @@ async function start() {
   }
 }
 
+// Heartbeat: cada 4 minutos ejecuta un SELECT 1 para mantener la conexión viva en Aiven
+setInterval(async () => {
+  try {
+    await sequelize.query('SELECT 1')
+  } catch (err) {
+    console.warn('Heartbeat DB falló, reconectando...', err.message)
+  }
+}, 4 * 60 * 1000)
+
 start()
