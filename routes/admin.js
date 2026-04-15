@@ -132,8 +132,8 @@ router.get('/movimientos', async (req, res) => {
     const movimientos = [
       ...entradas.map(e => ({
         tipo:        'entrada',
-        // e.fecha es DATE (YYYY-MM-DD). Añadir T12:00:00 evita desfase UTC en el cliente
-        fecha:       e.fecha ? `${e.fecha}T12:00:00` : null,
+        fecha:       e.fecha,   // DATEONLY: "YYYY-MM-DD"
+        solo_fecha:  true,      // no tiene hora, el cliente lo formatea solo como fecha
         cantidad:    e.cantidad,
         producto:    e.producto,
         referencia:  `Producción`,
