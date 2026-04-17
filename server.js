@@ -27,6 +27,7 @@ import './models/MovimientoCuenta.js'
 import './models/Caja.js'
 import './models/MovimientoCaja.js'
 import './models/AjusteStock.js'
+import './models/Proveedor.js'
 import Usuario from './models/Usuario.js'
 
 // Rutas
@@ -40,7 +41,8 @@ import pedidosRouter     from './routes/pedidos.js'
 import uploadsRouter     from './routes/uploads.js'
 import gastosRouter      from './routes/gastos.js'
 import cuentasRouter     from './routes/cuentas.js'
-import cajaRouter        from './routes/caja.js'
+import cajaRouter          from './routes/caja.js'
+import proveedoresRouter   from './routes/proveedores.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -77,7 +79,8 @@ app.use('/api/pedidos',    pedidosRouter)
 app.use('/api/uploads',    uploadsRouter)
 app.use('/api/gastos',     gastosRouter)
 app.use('/api/cuentas',   cuentasRouter)
-app.use('/api/caja',      cajaRouter)
+app.use('/api/caja',        cajaRouter)
+app.use('/api/proveedores', proveedoresRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {

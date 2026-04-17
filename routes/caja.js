@@ -78,15 +78,17 @@ router.post('/:id/movimiento', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'Caja no encontrada' })
     if (caja.estado === 'cerrada') return res.status(400).json({ error: 'La caja ya está cerrada' })
 
-    const { tipo, concepto, monto } = req.body
+    const { tipo, concepto, monto, medio } = req.body
     if (!tipo || !concepto || !monto) return res.status(400).json({ error: 'Faltan campos' })
     if (!['ingreso', 'egreso'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' })
+    if (medio && !['efectivo', 'billetera'].includes(medio)) return res.status(400).json({ error: 'Medio inválido' })
 
     const mov = await MovimientoCaja.create({
       caja_id:  caja.id,
       tipo,
       concepto,
       monto: parseFloat(monto),
+      medio: medio || 'efectivo',
     })
     res.status(201).json(mov)
   } catch (err) {
@@ -192,23 +194,25 @@ async function _resumenCaja(caja) {
     order: [['createdAt', 'ASC']],
   })
 
-  const totalIngresos = movimientos
-    .filter(m => m.tipo === 'ingreso')
-    .reduce((acc, m) => acc + parseFloat(m.monto), 0)
-  const totalEgresos = movimientos
-    .filter(m => m.tipo === 'egreso')
-    .reduce((acc, m) => acc + parseFloat(m.monto), 0)
+  // Separar por medio (default 'efectivo' para registros anteriores)
+  const movEfectivo  = movimientos.filter(m => !m.medio || m.medio === 'efectivo')
+  const movBilletera = movimientos.filter(m => m.medio === 'billetera')
+
+  const totalIngresos          = movEfectivo.filter(m => m.tipo === 'ingreso').reduce((acc, m) => acc + parseFloat(m.monto), 0)
+  const totalEgresos           = movEfectivo.filter(m => m.tipo === 'egreso').reduce((acc, m) => acc + parseFloat(m.monto), 0)
+  const totalIngresosBilletera = movBilletera.filter(m => m.tipo === 'ingreso').reduce((acc, m) => acc + parseFloat(m.monto), 0)
+  const totalEgresosBilletera  = movBilletera.filter(m => m.tipo === 'egreso').reduce((acc, m) => acc + parseFloat(m.monto), 0)
 
   // Saldo teórico en efectivo
   const efectivoVentas = ventasPorMetodo['efectivo'] || 0
   const efectivoGastos = gastosPorMetodo['efectivo'] || 0
   const saldoTeorico = parseFloat(caja.saldo_inicial) + efectivoVentas - efectivoGastos + totalIngresos - totalEgresos
 
-  // Saldo teórico billetera virtual (todos los métodos digitales)
+  // Saldo teórico billetera virtual (todos los métodos digitales + movimientos billetera)
   const METODOS_DIGITALES = ['transferencia', 'qr', 'debito', 'credito']
   const billeteraVentas = METODOS_DIGITALES.reduce((acc, m) => acc + (ventasPorMetodo[m] || 0), 0)
   const billeteraGastos = METODOS_DIGITALES.reduce((acc, m) => acc + (gastosPorMetodo[m] || 0), 0)
-  const saldoBilleteraFinal = parseFloat(caja.saldo_billetera_inicial) + billeteraVentas - billeteraGastos
+  const saldoBilleteraFinal = parseFloat(caja.saldo_billetera_inicial) + billeteraVentas - billeteraGastos + totalIngresosBilletera - totalEgresosBilletera
 
   return {
     ventas: ventas.length,
@@ -219,6 +223,8 @@ async function _resumenCaja(caja) {
     movimientos,
     totalIngresos,
     totalEgresos,
+    totalIngresosBilletera,
+    totalEgresosBilletera,
     saldoTeorico,
     saldoBilleteraFinal,
     billeteraVentas,

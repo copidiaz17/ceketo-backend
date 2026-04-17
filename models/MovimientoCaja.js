@@ -8,6 +8,7 @@ const MovimientoCaja = sequelize.define('MovimientoCaja', {
   tipo:        { type: DataTypes.ENUM('ingreso', 'egreso'), allowNull: false },
   concepto:    { type: DataTypes.STRING(300), allowNull: false },
   monto:       { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  medio:       { type: DataTypes.ENUM('efectivo', 'billetera'), allowNull: false, defaultValue: 'efectivo' },
 }, { tableName: 'movimientos_caja', freezeTableName: true, timestamps: true })
 
 export default MovimientoCaja

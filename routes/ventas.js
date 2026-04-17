@@ -126,6 +126,25 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// PATCH /api/ventas/:id — editar forma de pago
+router.patch('/:id', async (req, res) => {
+  try {
+    const venta = await Venta.findByPk(req.params.id)
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
+    const { metodo_pago, metodo_pago2, monto_pago2 } = req.body
+    const METODOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cuenta_corriente']
+    if (metodo_pago && !METODOS.includes(metodo_pago)) return res.status(400).json({ error: 'Método de pago inválido' })
+    await venta.update({
+      metodo_pago:  metodo_pago  || venta.metodo_pago,
+      metodo_pago2: metodo_pago2 || null,
+      monto_pago2:  monto_pago2  ? parseFloat(monto_pago2) : null,
+    })
+    res.json({ ok: true, venta })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/ventas/:id
 router.get('/:id', async (req, res) => {
   try {
