@@ -92,8 +92,23 @@ async function start() {
   try {
     await sequelize.authenticate()
     console.log('✓ MySQL conectado')
-    await sequelize.sync({ alter: true })
+    await sequelize.sync()
     console.log('✓ Tablas sincronizadas')
+
+    // Migraciones manuales: agregar columnas/tablas nuevas sin alter
+    try {
+      await sequelize.query(`
+        ALTER TABLE movimientos_caja
+        ADD COLUMN medio ENUM('efectivo','billetera') NOT NULL DEFAULT 'efectivo'
+      `)
+      console.log('✓ Columna medio agregada a movimientos_caja')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna medio ya existe')
+      } else {
+        console.warn('⚠ medio:', e.message)
+      }
+    }
 
     app.listen(PORT, () => {
       console.log(`🚀 CEKETO Backend corriendo en http://localhost:${PORT}`)
