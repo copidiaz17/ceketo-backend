@@ -164,7 +164,7 @@ router.get('/', async (req, res) => {
     // ── Por día ───────────────────────────────────────────────────────────────
     const diaMap = {}
     for (const op of operaciones) {
-      const dia = String(op.fecha).slice(0, 10)
+      const dia = new Date(op.fecha).toISOString().slice(0, 10)
       diaMap[dia] = (diaMap[dia] || 0) + op.total
     }
     const por_dia = Object.entries(diaMap)
