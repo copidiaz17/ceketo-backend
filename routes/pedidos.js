@@ -1,8 +1,10 @@
 import { Router } from 'express'
+import { Op } from 'sequelize'
 import { sequelize } from '../database.js'
 import Pedido from '../models/Pedido.js'
 import PedidoItem from '../models/PedidoItem.js'
 import Producto from '../models/Producto.js'
+import Categoria from '../models/Categoria.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -25,17 +27,46 @@ async function notificarWhatsApp(pedido, items) {
   } catch { /* no bloquear si falla WhatsApp */ }
 }
 
-// GET /api/pedidos  (admin)
+// GET /api/pedidos?estado=X&fecha_desde=YYYY-MM-DD&fecha_hasta=YYYY-MM-DD&producto_id=X&categoria_id=X  (admin)
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const { estado, fecha_desde, fecha_hasta, producto_id, categoria_id } = req.query
+
+    // Filtro sobre Pedido
+    const wherePedido = {}
+    if (estado && estado !== 'todos') wherePedido.estado = estado
+    if (fecha_desde || fecha_hasta) {
+      wherePedido.fecha = {}
+      if (fecha_desde) wherePedido.fecha[Op.gte] = new Date(fecha_desde)
+      if (fecha_hasta) {
+        const hasta = new Date(fecha_hasta)
+        hasta.setDate(hasta.getDate() + 1)
+        wherePedido.fecha[Op.lt] = hasta
+      }
+    }
+
+    // Filtro sobre Producto (para filtrar por producto_id o categoria_id)
+    const whereProducto = {}
+    if (producto_id)  whereProducto.id           = producto_id
+    if (categoria_id) whereProducto.categoria_id = categoria_id
+    const filtrarProducto = producto_id || categoria_id
+
     const pedidos = await Pedido.findAll({
+      where: wherePedido,
       include: [{
         model: PedidoItem,
         as: 'items',
-        include: [{ model: Producto, as: 'producto', attributes: ['id', 'codigo', 'nombre'] }],
+        include: [{
+          model: Producto,
+          as: 'producto',
+          attributes: ['id', 'codigo', 'nombre', 'categoria_id'],
+          include: [{ model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] }],
+          ...(filtrarProducto ? { where: whereProducto, required: true } : {}),
+        }],
+        ...(filtrarProducto ? { required: true } : {}),
       }],
       order: [['fecha', 'DESC']],
-      limit: 100,
+      limit: 500,
     })
     res.json(pedidos)
   } catch (err) {

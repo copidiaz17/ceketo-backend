@@ -105,27 +105,49 @@ router.get('/stock-bajo/count', async (req, res) => {
   }
 })
 
-// GET /api/admin/movimientos?producto_id=X
+// GET /api/admin/movimientos?producto_id=X&categoria_id=Y&fecha_desde=YYYY-MM-DD&fecha_hasta=YYYY-MM-DD
 router.get('/movimientos', async (req, res) => {
   try {
-    const { producto_id } = req.query
+    const { producto_id, categoria_id, fecha_desde, fecha_hasta } = req.query
     const whereP = producto_id ? { producto_id } : {}
+    const whereProducto = categoria_id ? { categoria_id } : {}
+    const includeProducto = {
+      model: Producto,
+      as: 'producto',
+      attributes: ['id', 'codigo', 'nombre', 'categoria_id'],
+      include: [{ model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] }],
+      ...(categoria_id ? { where: whereProducto, required: true } : {}),
+    }
+
+    // Rango de fechas para producciones (campo fecha DATEONLY)
+    const whereProduccion = { ...whereP }
+    if (fecha_desde) whereProduccion.fecha = { ...whereProduccion.fecha, [Op.gte]: fecha_desde }
+    if (fecha_hasta) whereProduccion.fecha = { ...whereProduccion.fecha, [Op.lte]: fecha_hasta }
 
     const entradas = await Produccion.findAll({
-      where: whereP,
-      include: [{ model: Producto, as: 'producto', attributes: ['id', 'codigo', 'nombre'] }],
+      where: whereProduccion,
+      include: [includeProducto],
       order: [['id', 'DESC']],
-      limit: 100,
+      limit: 500,
     })
+
+    // Rango de fechas para ventas (campo fecha DATETIME en Venta)
+    const whereVenta = {}
+    if (fecha_desde) whereVenta.fecha = { ...whereVenta.fecha, [Op.gte]: new Date(fecha_desde) }
+    if (fecha_hasta) {
+      const hasta = new Date(fecha_hasta)
+      hasta.setDate(hasta.getDate() + 1)
+      whereVenta.fecha = { ...whereVenta.fecha, [Op.lt]: hasta }
+    }
 
     const salidas = await VentaItem.findAll({
       where: producto_id ? { producto_id } : {},
       include: [
-        { model: Producto, as: 'producto', attributes: ['id', 'codigo', 'nombre'] },
-        { model: Venta,    as: 'venta',    attributes: ['id', 'fecha', 'tipo'] },
+        includeProducto,
+        { model: Venta, as: 'venta', attributes: ['id', 'fecha', 'tipo'], ...(Object.keys(whereVenta).length ? { where: whereVenta, required: true } : {}) },
       ],
       order: [['id', 'DESC']],
-      limit: 100,
+      limit: 500,
     })
 
     // Unificar y ordenar por fecha
