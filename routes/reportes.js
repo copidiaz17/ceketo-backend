@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   try {
     const { fecha_desde, fecha_hasta, categoria_id, producto_id } = req.query
 
-    // Rango de fechas
+    // ── Rango de fechas ──────────────────────────────────────────────────────
     const buildRange = () => {
       const r = {}
       if (fecha_desde) r[Op.gte] = new Date(fecha_desde)
@@ -28,80 +28,101 @@ router.get('/', async (req, res) => {
       return r
     }
     const rangoFecha = (fecha_desde || fecha_hasta) ? buildRange() : null
-
-    // Filtro de producto/categoría en include
-    const whereProducto = {}
-    if (producto_id)  whereProducto.id           = producto_id
-    if (categoria_id) whereProducto.categoria_id = categoria_id
     const filtrarProd = !!(producto_id || categoria_id)
 
-    const inclProd = {
+    // Include de producto (sin where – el filtro se hace en JS)
+    const inclProdVenta = {
       model: Producto,
       as: 'producto',
-      attributes: ['id', 'codigo', 'nombre'],
+      attributes: ['id', 'codigo', 'nombre', 'categoria_id'],
       include: [{ model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] }],
-      ...(filtrarProd ? { where: whereProducto, required: true } : {}),
+    }
+    const inclProdPedido = {
+      model: Producto,
+      as: 'producto',
+      attributes: ['id', 'codigo', 'nombre', 'categoria_id'],
+      include: [{ model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] }],
     }
 
-    // ── Ventas (POS) ────────────────────────────────────────────────────────
+    // ── Ventas (POS) ─────────────────────────────────────────────────────────
     const ventas = await Venta.findAll({
       where: rangoFecha ? { fecha: rangoFecha } : {},
-      include: [{
-        model: VentaItem, as: 'items',
-        include: [inclProd],
-        ...(filtrarProd ? { required: true } : {}),
-      }],
+      include: [{ model: VentaItem, as: 'items', include: [inclProdVenta] }],
       order: [['fecha', 'DESC']],
       limit: 2000,
     })
 
-    // ── Pedidos (online) ─────────────────────────────────────────────────────
+    // ── Pedidos (online) ──────────────────────────────────────────────────────
     const pedidos = await Pedido.findAll({
       where: rangoFecha ? { fecha: rangoFecha } : {},
-      include: [{
-        model: PedidoItem, as: 'items',
-        include: [inclProd],
-        ...(filtrarProd ? { required: true } : {}),
-      }],
+      include: [{ model: PedidoItem, as: 'items', include: [inclProdPedido] }],
       order: [['fecha', 'DESC']],
       limit: 2000,
     })
 
-    // ── Unificar operaciones ─────────────────────────────────────────────────
+    // ── Filtrar items por producto/categoría en JavaScript ────────────────────
+    function filtrarItems(items) {
+      return (items || []).filter(i => {
+        if (producto_id && String(i.producto?.id) !== String(producto_id)) return false
+        if (categoria_id && String(i.producto?.categoria_id) !== String(categoria_id)) return false
+        return true
+      })
+    }
+
     const mapItem = i => ({
-      categoria:  i.producto?.categoria?.nombre || '—',
-      producto:   i.producto?.nombre  || '—',
-      codigo:     i.producto?.codigo  || '—',
-      cantidad:   i.cantidad,
+      producto_id: i.producto?.id,
+      categoria_id: i.producto?.categoria_id,
+      categoria:   i.producto?.categoria?.nombre || '—',
+      producto:    i.producto?.nombre  || '—',
+      codigo:      i.producto?.codigo  || '—',
+      cantidad:    i.cantidad,
       precio_unit: parseFloat(i.precio_unit || 0),
-      subtotal:   parseFloat(i.subtotal || 0),
+      subtotal:    parseFloat(i.subtotal || 0),
     })
 
-    const operaciones = [
-      ...ventas.map(v => ({
-        id:         `V-${v.id}`,
-        fecha:      v.fecha,
-        origen:     v.tipo === 'online' ? 'Online' : 'Local',
-        cliente:    '—',
-        metodo_pago: v.metodo_pago || '—',
-        entrega:    'Retiro',
-        total:      parseFloat(v.total),
-        items:      (v.items || []).map(mapItem),
-      })),
-      ...pedidos.map(p => ({
-        id:         `P-${p.id}`,
-        fecha:      p.fecha,
-        origen:     'Online',
-        cliente:    p.nombre || '—',
-        telefono:   p.telefono || '',
-        metodo_pago: p.metodo_pago || '—',
-        entrega:    p.direccion ? 'Delivery' : 'Retiro',
-        total:      parseFloat(p.total),
-        items:      (p.items || []).map(mapItem),
-      })),
-    ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+    // ── Unificar operaciones ──────────────────────────────────────────────────
+    const operaciones = []
 
-    // ── Detalle plano ────────────────────────────────────────────────────────
+    for (const v of ventas) {
+      const itemsFiltrados = filtrarProd ? filtrarItems(v.items) : (v.items || [])
+      if (filtrarProd && itemsFiltrados.length === 0) continue
+      const totalOp = filtrarProd
+        ? itemsFiltrados.reduce((s, i) => s + parseFloat(i.subtotal || 0), 0)
+        : parseFloat(v.total)
+      operaciones.push({
+        id:          `V-${v.id}`,
+        fecha:       v.fecha,
+        origen:      v.tipo === 'online' ? 'Online' : 'Local',
+        cliente:     '—',
+        metodo_pago: v.metodo_pago || '—',
+        entrega:     'Retiro',
+        total:       totalOp,
+        items:       itemsFiltrados.map(mapItem),
+      })
+    }
+
+    for (const p of pedidos) {
+      const itemsFiltrados = filtrarProd ? filtrarItems(p.items) : (p.items || [])
+      if (filtrarProd && itemsFiltrados.length === 0) continue
+      const totalOp = filtrarProd
+        ? itemsFiltrados.reduce((s, i) => s + parseFloat(i.subtotal || 0), 0)
+        : parseFloat(p.total)
+      operaciones.push({
+        id:          `P-${p.id}`,
+        fecha:       p.fecha,
+        origen:      'Online',
+        cliente:     p.nombre || '—',
+        telefono:    p.telefono || '',
+        metodo_pago: p.metodo_pago || '—',
+        entrega:     p.direccion ? 'Delivery' : 'Retiro',
+        total:       totalOp,
+        items:       itemsFiltrados.map(mapItem),
+      })
+    }
+
+    operaciones.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+
+    // ── Detalle plano ─────────────────────────────────────────────────────────
     const detalle = []
     for (const op of operaciones) {
       for (const item of op.items) {
@@ -115,7 +136,7 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // ── Resumen por producto ─────────────────────────────────────────────────
+    // ── Resumen por producto ──────────────────────────────────────────────────
     const resumenMap = {}
     let totalGlobal = 0
     for (const d of detalle) {
@@ -131,7 +152,7 @@ router.get('/', async (req, res) => {
       .sort((a, b) => b.total - a.total)
       .map(r => ({ ...r, pct: totalGlobal > 0 ? parseFloat((r.total / totalGlobal * 100).toFixed(1)) : 0 }))
 
-    // ── Por categoría (gráfico) ──────────────────────────────────────────────
+    // ── Por categoría ─────────────────────────────────────────────────────────
     const catMap = {}
     for (const d of detalle) {
       catMap[d.categoria] = (catMap[d.categoria] || 0) + d.subtotal
@@ -140,7 +161,7 @@ router.get('/', async (req, res) => {
       .map(([cat, total]) => ({ categoria: cat, total, pct: totalGlobal > 0 ? parseFloat((total / totalGlobal * 100).toFixed(1)) : 0 }))
       .sort((a, b) => b.total - a.total)
 
-    // ── Por día (gráfico) ────────────────────────────────────────────────────
+    // ── Por día ───────────────────────────────────────────────────────────────
     const diaMap = {}
     for (const op of operaciones) {
       const dia = String(op.fecha).slice(0, 10)
@@ -150,12 +171,12 @@ router.get('/', async (req, res) => {
       .map(([dia, total]) => ({ dia, total }))
       .sort((a, b) => a.dia.localeCompare(b.dia))
 
-    // ── KPIs ─────────────────────────────────────────────────────────────────
+    // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis = {
-      total:          totalGlobal,
-      n_operaciones:  operaciones.length,
+      total:           totalGlobal,
+      n_operaciones:   operaciones.length,
       ticket_promedio: operaciones.length > 0 ? Math.round(totalGlobal / operaciones.length) : 0,
-      unidades:       detalle.reduce((s, d) => s + d.cantidad, 0),
+      unidades:        detalle.reduce((s, d) => s + d.cantidad, 0),
     }
 
     res.json({ kpis, operaciones, detalle, resumen, por_categoria, por_dia })
