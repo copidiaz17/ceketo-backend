@@ -43,6 +43,7 @@ import gastosRouter      from './routes/gastos.js'
 import cuentasRouter     from './routes/cuentas.js'
 import cajaRouter          from './routes/caja.js'
 import proveedoresRouter   from './routes/proveedores.js'
+import reportesRouter      from './routes/reportes.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -81,6 +82,7 @@ app.use('/api/gastos',     gastosRouter)
 app.use('/api/cuentas',   cuentasRouter)
 app.use('/api/caja',        cajaRouter)
 app.use('/api/proveedores', proveedoresRouter)
+app.use('/api/admin/reportes', reportesRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
