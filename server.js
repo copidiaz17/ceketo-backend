@@ -28,6 +28,9 @@ import './models/Caja.js'
 import './models/MovimientoCaja.js'
 import './models/AjusteStock.js'
 import './models/Proveedor.js'
+import './models/Insumo.js'
+import './models/LoteInsumo.js'
+import './models/LoteHoras.js'
 import Usuario from './models/Usuario.js'
 
 // Rutas
@@ -44,6 +47,8 @@ import cuentasRouter     from './routes/cuentas.js'
 import cajaRouter          from './routes/caja.js'
 import proveedoresRouter   from './routes/proveedores.js'
 import reportesRouter      from './routes/reportes.js'
+import insumosRouter       from './routes/insumos.js'
+import loteCostosRouter    from './routes/loteCostos.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -83,6 +88,8 @@ app.use('/api/cuentas',   cuentasRouter)
 app.use('/api/caja',        cajaRouter)
 app.use('/api/proveedores', proveedoresRouter)
 app.use('/api/admin/reportes', reportesRouter)
+app.use('/api/insumos',       insumosRouter)
+app.use('/api/lote-costos',   loteCostosRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
