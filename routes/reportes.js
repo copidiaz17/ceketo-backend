@@ -69,25 +69,32 @@ router.get('/', async (req, res) => {
       })
     }
 
-    const mapItem = i => ({
-      producto_id: i.producto?.id,
-      categoria_id: i.producto?.categoria_id,
-      categoria:   i.producto?.categoria?.nombre || '—',
-      producto:    i.producto?.nombre  || '—',
-      codigo:      i.producto?.codigo  || '—',
-      cantidad:    i.cantidad,
-      precio_unit: parseFloat(i.precio_unit || 0),
-      subtotal:    parseFloat(i.subtotal || 0),
-    })
+    const mapItem = (i, descuentoPct = 0) => {
+      const subtotalOriginal = parseFloat(i.subtotal || 0)
+      return {
+        producto_id:       i.producto?.id,
+        categoria_id:      i.producto?.categoria_id,
+        categoria:         i.producto?.categoria?.nombre || '—',
+        producto:          i.producto?.nombre  || '—',
+        codigo:            i.producto?.codigo  || '—',
+        cantidad:          i.cantidad,
+        precio_unit:       parseFloat(i.precio_unit || 0),
+        subtotal_original: subtotalOriginal,
+        subtotal:          parseFloat((subtotalOriginal * (1 - descuentoPct / 100)).toFixed(2)),
+        descuento_pct:     descuentoPct,
+      }
+    }
 
     // ── Unificar operaciones ──────────────────────────────────────────────────
     const operaciones = []
 
     for (const v of ventas) {
-      const itemsFiltrados = filtrarProd ? filtrarItems(v.items) : (v.items || [])
+      const descuentoPct    = parseFloat(v.descuento || 0)
+      const itemsFiltrados  = filtrarProd ? filtrarItems(v.items) : (v.items || [])
       if (filtrarProd && itemsFiltrados.length === 0) continue
+      const mappedItems = itemsFiltrados.map(i => mapItem(i, descuentoPct))
       const totalOp = filtrarProd
-        ? itemsFiltrados.reduce((s, i) => s + parseFloat(i.subtotal || 0), 0)
+        ? mappedItems.reduce((s, i) => s + i.subtotal, 0)
         : parseFloat(v.total)
       operaciones.push({
         id:          `V-${v.id}`,
@@ -97,15 +104,18 @@ router.get('/', async (req, res) => {
         metodo_pago: v.metodo_pago || '—',
         entrega:     'Retiro',
         total:       totalOp,
-        items:       itemsFiltrados.map(mapItem),
+        descuento:   descuentoPct,
+        nota:        v.nota || '',
+        items:       mappedItems,
       })
     }
 
     for (const p of pedidos) {
       const itemsFiltrados = filtrarProd ? filtrarItems(p.items) : (p.items || [])
       if (filtrarProd && itemsFiltrados.length === 0) continue
+      const mappedItems = itemsFiltrados.map(i => mapItem(i, 0))
       const totalOp = filtrarProd
-        ? itemsFiltrados.reduce((s, i) => s + parseFloat(i.subtotal || 0), 0)
+        ? mappedItems.reduce((s, i) => s + i.subtotal, 0)
         : parseFloat(p.total)
       operaciones.push({
         id:          `P-${p.id}`,
@@ -116,7 +126,9 @@ router.get('/', async (req, res) => {
         metodo_pago: p.metodo_pago || '—',
         entrega:     p.direccion ? 'Delivery' : 'Retiro',
         total:       totalOp,
-        items:       itemsFiltrados.map(mapItem),
+        descuento:   0,
+        nota:        '',
+        items:       mappedItems,
       })
     }
 
@@ -131,6 +143,7 @@ router.get('/', async (req, res) => {
           fecha:        op.fecha,
           origen:       op.origen,
           cliente:      op.cliente,
+          nota:         op.nota,
           ...item,
         })
       }
