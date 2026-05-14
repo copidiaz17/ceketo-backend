@@ -14,7 +14,16 @@ router.use(requireAuth)
 // GET /api/ventas - historial
 router.get('/', async (req, res) => {
   try {
+    const { fecha } = req.query
+    const whereClause = fecha
+      ? sequelize.where(
+          sequelize.fn('DATE', sequelize.fn('CONVERT_TZ', sequelize.col('fecha'), '+00:00', '-03:00')),
+          fecha
+        )
+      : {}
+
     const ventas = await Venta.findAll({
+      where: whereClause,
       include: [{
         model: VentaItem,
         as: 'items',
@@ -26,7 +35,7 @@ router.get('/', async (req, res) => {
         }],
       }],
       order: [['fecha', 'DESC'], ['id', 'DESC']],
-      limit: 100,
+      limit: fecha ? undefined : 100,
     })
     res.json(ventas)
   } catch (err) {
