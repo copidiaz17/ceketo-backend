@@ -32,6 +32,7 @@ import './models/Insumo.js'
 import './models/LoteInsumo.js'
 import './models/LoteHoras.js'
 import Usuario from './models/Usuario.js'
+import Insumo  from './models/Insumo.js'
 
 // Rutas
 import productosRouter   from './routes/productos.js'
@@ -132,6 +133,29 @@ async function start() {
         console.warn('⚠ costo_envio:', e.message)
       }
     }
+
+    // Seed de insumos base (solo si no existen por nombre)
+    const insumosBase = [
+      { nombre: 'Harina de almendras y semillas de Damasco', unidad: 'kg' },
+      { nombre: 'Harina de almendras pura',                  unidad: 'kg' },
+      { nombre: 'Levadura',                                   unidad: 'kg' },
+      { nombre: 'Grasa',                                      unidad: 'kg' },
+      { nombre: 'Harina de semillas',                         unidad: 'kg' },
+      { nombre: 'Manteca',                                    unidad: 'kg' },
+      { nombre: 'Aceite de oliva',                            unidad: 'litro' },
+      { nombre: 'Moon de pan',                                unidad: 'unidad' },
+      { nombre: 'Molde de budín',                             unidad: 'unidad' },
+    ]
+    let insumosCreados = 0
+    for (const ins of insumosBase) {
+      const existe = await Insumo.findOne({ where: { nombre: ins.nombre } })
+      if (!existe) {
+        await Insumo.create({ ...ins, costo_unitario: 0, activo: true })
+        insumosCreados++
+      }
+    }
+    if (insumosCreados > 0) console.log(`✓ ${insumosCreados} insumo(s) base creados`)
+    else console.log('✓ Insumos base ya existentes')
 
     app.listen(PORT, () => {
       console.log(`🚀 CEKETO Backend corriendo en http://localhost:${PORT}`)
