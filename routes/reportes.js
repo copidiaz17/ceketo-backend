@@ -16,15 +16,11 @@ router.get('/', async (req, res) => {
   try {
     const { fecha_desde, fecha_hasta, categoria_id, producto_id } = req.query
 
-    // ── Rango de fechas ──────────────────────────────────────────────────────
+    // ── Rango de fechas (en timezone Argentina UTC-3) ────────────────────────
     const buildRange = () => {
       const r = {}
-      if (fecha_desde) r[Op.gte] = new Date(fecha_desde)
-      if (fecha_hasta) {
-        const h = new Date(fecha_hasta)
-        h.setDate(h.getDate() + 1)
-        r[Op.lt] = h
-      }
+      if (fecha_desde) r[Op.gte] = new Date(fecha_desde + 'T00:00:00-03:00')
+      if (fecha_hasta) r[Op.lte] = new Date(fecha_hasta + 'T23:59:59.999-03:00')
       return r
     }
     const rangoFecha = (fecha_desde || fecha_hasta) ? buildRange() : null
