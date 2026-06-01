@@ -119,6 +119,20 @@ async function start() {
       }
     }
 
+    try {
+      await sequelize.query(`
+        ALTER TABLE ventas
+        ADD COLUMN costo_envio DECIMAL(10,2) NOT NULL DEFAULT 0
+      `)
+      console.log('✓ Columna costo_envio agregada a ventas')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna costo_envio ya existe')
+      } else {
+        console.warn('⚠ costo_envio:', e.message)
+      }
+    }
+
     app.listen(PORT, () => {
       console.log(`🚀 CEKETO Backend corriendo en http://localhost:${PORT}`)
     })
