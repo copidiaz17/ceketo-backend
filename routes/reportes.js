@@ -181,6 +181,7 @@ router.get('/', async (req, res) => {
 
 // ── GET /api/admin/reportes/extras ────────────────────────────────────────────
 // Gastos, Producción, Stock y Cajas para el mismo período
+// Cada sección es independiente: si una falla no bloquea a las demás
 router.get('/extras', async (req, res) => {
   try {
     const { fecha_desde, fecha_hasta } = req.query
@@ -190,15 +191,54 @@ router.get('/extras', async (req, res) => {
     const whereDate = rangoDate ? { fecha: rangoDate } : {}
     const whereUTC  = rangoUTC  ? { fecha_apertura: rangoUTC } : {}
 
-    // ── Gastos ────────────────────────────────────────────────────
-    const gastos = await Gasto.findAll({
-      where: whereDate,
-      order: [['fecha', 'DESC']],
-    })
+    // Ejecutar las 4 queries en paralelo, de forma independiente
+    const [gastosR, produccionR, stockR, cajasR] = await Promise.allSettled([
 
+      // ── Gastos ──────────────────────────────────────────────────
+      Gasto.findAll({ where: whereDate, order: [['fecha', 'DESC']] }),
+
+      // ── Producción ──────────────────────────────────────────────
+      Produccion.findAll({
+        where: whereDate,
+        include: [{
+          model: Producto, as: 'producto',
+          attributes: ['id', 'codigo', 'nombre'],
+          include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
+        }],
+        order: [['fecha', 'DESC'], ['id', 'DESC']],
+        limit: 1000,
+      }),
+
+      // ── Stock actual ─────────────────────────────────────────────
+      Producto.findAll({
+        where: { activo: true },
+        attributes: ['id', 'codigo', 'nombre', 'precio', 'stock', 'precio_costo'],
+        include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
+        order: [['nombre', 'ASC']],
+      }),
+
+      // ── Cajas del período ────────────────────────────────────────
+      Caja.findAll({
+        where: Object.keys(whereUTC).length ? whereUTC : {},
+        order: [['fecha_apertura', 'DESC']],
+        limit: 60,
+      }),
+    ])
+
+    // Loguear errores sin abortar la respuesta
+    if (gastosR.status    === 'rejected') console.error('extras/gastos:', gastosR.reason?.message)
+    if (produccionR.status === 'rejected') console.error('extras/produccion:', produccionR.reason?.message)
+    if (stockR.status     === 'rejected') console.error('extras/stock:', stockR.reason?.message)
+    if (cajasR.status     === 'rejected') console.error('extras/cajas:', cajasR.reason?.message)
+
+    const gastos    = gastosR.status    === 'fulfilled' ? gastosR.value    : []
+    const produccion = produccionR.status === 'fulfilled' ? produccionR.value : []
+    const stock     = stockR.status     === 'fulfilled' ? stockR.value     : []
+    const cajas     = cajasR.status     === 'fulfilled' ? cajasR.value     : []
+
+    // ── Calcular resúmenes de gastos ──────────────────────────────
     const gastosPorCategoria = {}
-    let totalGastos = 0
-    let ivaTotal = 0
+    let totalGastos = 0, ivaTotal = 0
     for (const g of gastos) {
       const cat = g.categoria || 'Otros'
       if (!gastosPorCategoria[cat]) gastosPorCategoria[cat] = { total: 0, cantidad: 0, iva: 0 }
@@ -211,72 +251,35 @@ router.get('/extras', async (req, res) => {
 
     const gastosPorDia = {}
     for (const g of gastos) {
-      gastosPorDia[g.fecha] = (gastosPorDia[g.fecha] || 0) + Number(g.monto)
+      const dia = String(g.fecha)
+      gastosPorDia[dia] = (gastosPorDia[dia] || 0) + Number(g.monto)
     }
     const gastosPorDiaArr = Object.entries(gastosPorDia)
       .map(([dia, total]) => ({ dia, total }))
       .sort((a, b) => a.dia.localeCompare(b.dia))
 
-    // ── Producción ────────────────────────────────────────────────
-    const produccion = await Produccion.findAll({
-      where: whereDate,
-      include: [{
-        model: Producto, as: 'producto',
-        attributes: ['id', 'codigo', 'nombre'],
-        include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
-      }],
-      order: [['fecha', 'DESC'], ['id', 'DESC']],
-      limit: 1000,
-    })
-
-    // Agrupar producción por lote_id
+    // ── Calcular resúmenes de producción ──────────────────────────
     const lotesMap = {}
     let totalUnidadesProducidas = 0
+    const produccionPorProducto = {}
     for (const r of produccion) {
       const key = r.lote_id || `fecha-${r.fecha}`
       if (!lotesMap[key]) lotesMap[key] = { lote_id: key, fecha: r.fecha, nota: r.nota, items: [], total_unidades: 0 }
-      lotesMap[key].items.push({
-        producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre,
-        codigo: r.producto?.codigo, cantidad: Number(r.cantidad),
-      })
+      lotesMap[key].items.push({ producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre, codigo: r.producto?.codigo, cantidad: Number(r.cantidad) })
       lotesMap[key].total_unidades += Number(r.cantidad)
       totalUnidadesProducidas      += Number(r.cantidad)
+      const pk = r.producto?.nombre || String(r.producto_id)
+      if (!produccionPorProducto[pk]) produccionPorProducto[pk] = { producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre, codigo: r.producto?.codigo, cantidad: 0 }
+      produccionPorProducto[pk].cantidad += Number(r.cantidad)
     }
 
-    // Resumen producción por producto
-    const produccionPorProducto = {}
-    for (const r of produccion) {
-      const key = r.producto?.nombre || String(r.producto_id)
-      if (!produccionPorProducto[key]) {
-        produccionPorProducto[key] = { producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre, codigo: r.producto?.codigo, cantidad: 0 }
-      }
-      produccionPorProducto[key].cantidad += Number(r.cantidad)
-    }
-
-    // ── Stock actual ──────────────────────────────────────────────
-    const stock = await Producto.findAll({
-      where: { activo: true },
-      attributes: ['id', 'codigo', 'nombre', 'precio', 'stock', 'precio_costo'],
-      include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
-      order: [['nombre', 'ASC']],
-    })
-
+    // ── Calcular valorización de stock ────────────────────────────
     let stockValorCosto = 0, stockValorVenta = 0
-    const stockBajo = []
     for (const p of stock) {
-      const costo = Number(p.precio_costo || 0)
-      const venta = Number(p.precio      || 0)
-      const cant  = Number(p.stock       || 0)
-      stockValorCosto += cant * costo
-      stockValorVenta += cant * venta
+      const cant = Number(p.stock || 0)
+      stockValorCosto += cant * Number(p.precio_costo || 0)
+      stockValorVenta += cant * Number(p.precio      || 0)
     }
-
-    // ── Cajas del período ─────────────────────────────────────────
-    const cajas = await Caja.findAll({
-      where: Object.keys(whereUTC).length ? whereUTC : {},
-      order: [['fecha_apertura', 'DESC']],
-      limit: 60,
-    })
 
     res.json({
       gastos,
