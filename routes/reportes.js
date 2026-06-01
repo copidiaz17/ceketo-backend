@@ -15,18 +15,23 @@ const router = Router()
 router.use(requireAuth)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Op.gte / Op.lte son Symbols → Object.keys() no los ve.
+// Se chequean los parámetros de entrada, no las claves del objeto.
+
 function buildRangoUTC(fecha_desde, fecha_hasta) {
+  if (!fecha_desde && !fecha_hasta) return null
   const r = {}
   if (fecha_desde) r[Op.gte] = new Date(fecha_desde + 'T00:00:00-03:00')
   if (fecha_hasta) r[Op.lte] = new Date(fecha_hasta + 'T23:59:59.999-03:00')
-  return Object.keys(r).length ? r : null
+  return r
 }
 
 function buildRangoDate(fecha_desde, fecha_hasta) {
+  if (!fecha_desde && !fecha_hasta) return null
   const r = {}
   if (fecha_desde) r[Op.gte] = fecha_desde
   if (fecha_hasta) r[Op.lte] = fecha_hasta
-  return Object.keys(r).length ? r : null
+  return r
 }
 
 // ── GET /api/admin/reportes ───────────────────────────────────────────────────
