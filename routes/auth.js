@@ -14,11 +14,25 @@ const loginLimiter = rateLimit({
   message: { error: 'Demasiados intentos de login. Intentá en 15 minutos.' },
 })
 
+// GET /api/auth/me
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const user = await Usuario.findOne({
+      where: { usuario: req.admin.usuario },
+      attributes: ['id', 'usuario', 'rol', 'activo'],
+    })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+    res.json(user)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/auth/login
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { usuario, password } = req.body
-    const user = await Usuario.findOne({ where: { usuario, activo: true } })
+    const user = await Usuario.findOne({ where: { usuario: usuario?.trim().toLowerCase(), activo: true } })
     if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' })
     const ok = await bcrypt.compare(password, user.password)
     if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' })

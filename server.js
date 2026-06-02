@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
+import bcrypt from 'bcryptjs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import dotenv from 'dotenv'
@@ -50,6 +51,7 @@ import proveedoresRouter   from './routes/proveedores.js'
 import reportesRouter      from './routes/reportes.js'
 import insumosRouter       from './routes/insumos.js'
 import loteCostosRouter    from './routes/loteCostos.js'
+import usuariosRouter      from './routes/usuarios.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -91,6 +93,7 @@ app.use('/api/proveedores', proveedoresRouter)
 app.use('/api/admin/reportes', reportesRouter)
 app.use('/api/insumos',       insumosRouter)
 app.use('/api/lote-costos',   loteCostosRouter)
+app.use('/api/usuarios',      usuariosRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -156,6 +159,18 @@ async function start() {
     }
     if (insumosCreados > 0) console.log(`✓ ${insumosCreados} insumo(s) base creados`)
     else console.log('✓ Insumos base ya existentes')
+
+    // Seed: usuario admin copidiaz17@gmail.com (solo crea si no existe)
+    const existeCopi = await Usuario.findOne({ where: { usuario: 'copidiaz17@gmail.com' } })
+    if (!existeCopi) {
+      await Usuario.create({
+        usuario: 'copidiaz17@gmail.com',
+        password: await bcrypt.hash('Martina2013', 10),
+        rol: 'admin',
+        activo: true,
+      })
+      console.log('✓ Usuario copidiaz17@gmail.com creado')
+    }
 
     app.listen(PORT, () => {
       console.log(`🚀 CEKETO Backend corriendo en http://localhost:${PORT}`)
