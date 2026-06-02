@@ -8,7 +8,8 @@ import Producto   from '../models/Producto.js'
 import Categoria  from '../models/Categoria.js'
 import Gasto      from '../models/Gasto.js'
 import Produccion from '../models/Produccion.js'
-import Caja       from '../models/Caja.js'
+import Caja            from '../models/Caja.js'
+import MovimientoCaja  from '../models/MovimientoCaja.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -286,9 +287,43 @@ router.get('/extras', async (req, res) => {
       stockValorVenta += cant * Number(p.precio      || 0)
     }
 
+    // ── Movimientos manuales de cajas del período ─────────────────
+    let movimientosManuales = []
+    const cajaIds = cajas.map(c => c.id)
+    if (cajaIds.length > 0) {
+      try {
+        movimientosManuales = await MovimientoCaja.findAll({
+          where: { caja_id: { [Op.in]: cajaIds } },
+          order: [['createdAt', 'ASC']],
+        })
+      } catch (e) { console.error('extras/movimientos:', e.message) }
+    }
+
+    const EFECTIVO   = m => !m.medio || m.medio === 'efectivo'
+    const BILLETERA  = m => m.medio === 'billetera'
+    const resumenMovimientos = {
+      ingresos_efectivo:  movimientosManuales.filter(m => m.tipo === 'ingreso' && EFECTIVO(m)).reduce((s, m) => s + Number(m.monto), 0),
+      egresos_efectivo:   movimientosManuales.filter(m => m.tipo === 'egreso'  && EFECTIVO(m)).reduce((s, m) => s + Number(m.monto), 0),
+      ingresos_billetera: movimientosManuales.filter(m => m.tipo === 'ingreso' && BILLETERA(m)).reduce((s, m) => s + Number(m.monto), 0),
+      egresos_billetera:  movimientosManuales.filter(m => m.tipo === 'egreso'  && BILLETERA(m)).reduce((s, m) => s + Number(m.monto), 0),
+      detalle: movimientosManuales.map(m => ({
+        id: m.id, caja_id: m.caja_id, tipo: m.tipo, concepto: m.concepto,
+        monto: Number(m.monto), medio: m.medio || 'efectivo', fecha: m.createdAt,
+      })),
+    }
+
+    // Gastos por medio (efectivo vs digital)
+    const METODOS_DIGITALES = ['transferencia', 'qr', 'debito', 'credito']
+    const gastosPorMedio = {
+      efectivo: gastos.filter(g => !g.metodo_pago || g.metodo_pago === 'efectivo').reduce((s, g) => s + Number(g.monto), 0),
+      digital:  gastos.filter(g => METODOS_DIGITALES.includes(g.metodo_pago)).reduce((s, g) => s + Number(g.monto), 0),
+      sin_metodo: gastos.filter(g => !g.metodo_pago).reduce((s, g) => s + Number(g.monto), 0),
+    }
+
     res.json({
       gastos,
       gastosPorCategoria,
+      gastosPorMedio,
       gastosPorDia: gastosPorDiaArr,
       totalGastos,
       ivaTotal,
@@ -299,6 +334,7 @@ router.get('/extras', async (req, res) => {
       stockValorCosto,
       stockValorVenta,
       cajas,
+      resumenMovimientos,
     })
   } catch (err) {
     console.error(err)
