@@ -125,6 +125,20 @@ async function start() {
 
     try {
       await sequelize.query(`
+        ALTER TABLE movimientos_caja
+        ADD COLUMN fecha DATE NOT NULL DEFAULT (CURDATE())
+      `)
+      console.log('✓ Columna fecha agregada a movimientos_caja')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna fecha ya existe en movimientos_caja')
+      } else {
+        console.warn('⚠ fecha movimientos_caja:', e.message)
+      }
+    }
+
+    try {
+      await sequelize.query(`
         ALTER TABLE ventas
         ADD COLUMN costo_envio DECIMAL(10,2) NOT NULL DEFAULT 0
       `)

@@ -78,7 +78,7 @@ router.post('/:id/movimiento', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'Caja no encontrada' })
     if (caja.estado === 'cerrada') return res.status(400).json({ error: 'La caja ya está cerrada' })
 
-    const { tipo, concepto, monto, medio } = req.body
+    const { tipo, concepto, monto, medio, fecha } = req.body
     if (!tipo || !concepto || !monto) return res.status(400).json({ error: 'Faltan campos' })
     if (!['ingreso', 'egreso'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' })
     if (medio && !['efectivo', 'billetera'].includes(medio)) return res.status(400).json({ error: 'Medio inválido' })
@@ -89,6 +89,7 @@ router.post('/:id/movimiento', async (req, res) => {
       concepto,
       monto: parseFloat(monto),
       medio: medio || 'efectivo',
+      fecha: fecha || new Date().toISOString().split('T')[0],
     })
     res.status(201).json(mov)
   } catch (err) {
