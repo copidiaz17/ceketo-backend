@@ -144,16 +144,22 @@ async function _resumenCaja(caja) {
   // Ventas en el período
   const ventas = await Venta.findAll({
     where: { fecha: { [Op.between]: [desde, hasta] } },
-    attributes: ['metodo_pago', 'total'],
+    attributes: ['metodo_pago', 'metodo_pago2', 'monto_pago2', 'total'],
   })
 
-  // Agrupar ventas por método de pago
+  // Agrupar ventas por método de pago (soporta pago dividido en 2 métodos)
   const ventasPorMetodo = {}
   let totalVentas = 0
   for (const v of ventas) {
-    const m = v.metodo_pago || 'sin_metodo'
-    ventasPorMetodo[m] = (ventasPorMetodo[m] || 0) + parseFloat(v.total)
-    totalVentas += parseFloat(v.total)
+    const total  = parseFloat(v.total)
+    const monto2 = v.metodo_pago2 && v.monto_pago2 ? parseFloat(v.monto_pago2) : 0
+    const monto1 = total - monto2
+    const m1 = v.metodo_pago || 'sin_metodo'
+    ventasPorMetodo[m1] = (ventasPorMetodo[m1] || 0) + monto1
+    if (monto2 > 0) {
+      ventasPorMetodo[v.metodo_pago2] = (ventasPorMetodo[v.metodo_pago2] || 0) + monto2
+    }
+    totalVentas += total
   }
 
   // Gastos en el período agrupados por método de pago

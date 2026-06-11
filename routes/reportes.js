@@ -102,13 +102,19 @@ router.get('/', async (req, res) => {
       operaciones.push({
         id: `V-${v.id}`, fecha: v.fecha, origen: v.tipo === 'online' ? 'Online' : 'Local',
         cliente: '—', metodo_pago: v.metodo_pago || '—', entrega: 'Retiro',
+        metodo_pago2: v.metodo_pago2 || null, monto_pago2: v.monto_pago2 != null ? parseFloat(v.monto_pago2) : null,
         total: totalOp, descuento: descuentoPct,
         costo_envio: parseFloat(v.costo_envio || 0),
         nota: v.nota || '', items: mappedItems,
       })
-      // Acumular por método de pago
-      const mp = v.metodo_pago || 'sin_metodo'
-      ventasPorMetodo[mp] = (ventasPorMetodo[mp] || 0) + parseFloat(v.total)
+      // Acumular por método de pago (soporta pago dividido en 2 métodos)
+      const monto2 = (!filtrarProd && v.metodo_pago2 && v.monto_pago2) ? parseFloat(v.monto_pago2) : 0
+      const monto1 = totalOp - monto2
+      const mp1 = v.metodo_pago || 'sin_metodo'
+      ventasPorMetodo[mp1] = (ventasPorMetodo[mp1] || 0) + monto1
+      if (monto2 > 0) {
+        ventasPorMetodo[v.metodo_pago2] = (ventasPorMetodo[v.metodo_pago2] || 0) + monto2
+      }
     }
 
     for (const p of pedidos) {
