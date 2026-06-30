@@ -78,7 +78,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const { nombre, telefono, email, direccion, localidad, metodo_pago, nota, items } = req.body
+    const { nombre, telefono, email, direccion, localidad, metodo_pago, tipo_entrega, nota, items } = req.body
     if (!items?.length) return res.status(400).json({ error: 'Sin productos' })
 
     let total = 0
@@ -87,16 +87,16 @@ router.post('/', async (req, res) => {
       const prod = await Producto.findByPk(item.producto_id, { transaction: t })
       if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado`)
       if (!prod.activo) throw new Error(`${prod.nombre} no está disponible`)
-      if (prod.stock < parseInt(item.cantidad)) throw new Error(`Stock insuficiente para ${prod.nombre}`)
       const precio   = parseFloat(item.precio_unit || prod.precio)
       const subtotal = precio * parseInt(item.cantidad)
       total += subtotal
-      await prod.update({ stock: prod.stock - parseInt(item.cantidad) }, { transaction: t })
+      // El stock NO se descuenta acá: el pedido queda PENDIENTE y el stock se descuenta
+      // recién cuando la dueña confirma la venta en el POS (Ventas).
       itemsVal.push({ producto_id: item.producto_id, cantidad: item.cantidad, precio_unit: precio, subtotal })
     }
 
     const pedido = await Pedido.create(
-      { nombre, telefono, email, direccion, localidad, metodo_pago, nota, total },
+      { nombre, telefono, email, direccion, localidad, metodo_pago, tipo_entrega, nota, total },
       { transaction: t }
     )
     await PedidoItem.bulkCreate(
@@ -119,7 +119,10 @@ router.patch('/:id/estado', requireAuth, async (req, res) => {
   try {
     const pedido = await Pedido.findByPk(req.params.id)
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' })
-    await pedido.update({ estado: req.body.estado })
+    const updates = {}
+    if (req.body.estado   !== undefined) updates.estado   = req.body.estado
+    if (req.body.venta_id !== undefined) updates.venta_id = req.body.venta_id
+    await pedido.update(updates)
     res.json(pedido)
   } catch (err) {
     res.status(500).json({ error: err.message })

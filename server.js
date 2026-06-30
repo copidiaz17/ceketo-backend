@@ -151,6 +151,34 @@ async function start() {
       }
     }
 
+    try {
+      await sequelize.query(`
+        ALTER TABLE pedidos
+        ADD COLUMN tipo_entrega ENUM('retiro','envio') NOT NULL DEFAULT 'retiro'
+      `)
+      console.log('✓ Columna tipo_entrega agregada a pedidos')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna tipo_entrega ya existe')
+      } else {
+        console.warn('⚠ tipo_entrega:', e.message)
+      }
+    }
+
+    try {
+      await sequelize.query(`
+        ALTER TABLE pedidos
+        ADD COLUMN venta_id INT NULL
+      `)
+      console.log('✓ Columna venta_id agregada a pedidos')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna venta_id ya existe')
+      } else {
+        console.warn('⚠ venta_id pedidos:', e.message)
+      }
+    }
+
     // Seed de insumos base (solo si no existen por nombre)
     const insumosBase = [
       { nombre: 'Harina de almendras y semillas de Damasco', unidad: 'kg' },
