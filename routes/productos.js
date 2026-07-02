@@ -1,7 +1,9 @@
 import { Router } from 'express'
-import { Op } from 'sequelize'
+import { Op, QueryTypes } from 'sequelize'
+import { sequelize } from '../database.js'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
+import VentaItem from '../models/VentaItem.js'
 import AjusteStock from '../models/AjusteStock.js'
 import { requireAuth } from './auth.js'
 
@@ -39,6 +41,61 @@ router.get('/', async (req, res) => {
     res.json(productos)
   } catch (err) {
     console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/productos/mas-vendidos?limit=6  (público - "Lo más elegido")
+// Best-sellers REALES: suma de cantidades vendidas por producto, excluyendo Market (MKT).
+// Si hay pocos productos con ventas, rellena con productos activos para completar el limit.
+router.get('/mas-vendidos', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 6
+    const tVi   = VentaItem.getTableName()
+    const tProd = Producto.getTableName()
+    const tCat  = Categoria.getTableName()
+
+    const filas = await sequelize.query(
+      `SELECT p.id, p.codigo, p.nombre, p.precio, p.stock, p.activo, p.imagen, p.categoria_id,
+              c.id AS cat_id, c.codigo AS cat_codigo, c.nombre AS cat_nombre,
+              SUM(vi.cantidad) AS total_vendido
+       FROM \`${tVi}\` vi
+       JOIN \`${tProd}\` p ON p.id = vi.producto_id
+       JOIN \`${tCat}\` c ON c.id = p.categoria_id
+       WHERE p.activo = 1 AND c.codigo <> 'MKT'
+       GROUP BY p.id, p.codigo, p.nombre, p.precio, p.stock, p.activo, p.imagen, p.categoria_id, c.id, c.codigo, c.nombre
+       ORDER BY total_vendido DESC
+       LIMIT :limit`,
+      { replacements: { limit }, type: QueryTypes.SELECT }
+    )
+
+    let masVendidos = filas.map(r => ({
+      id: r.id, codigo: r.codigo, nombre: r.nombre, precio: r.precio,
+      stock: r.stock, activo: !!r.activo, imagen: r.imagen, categoria_id: r.categoria_id,
+      categoria: { id: r.cat_id, codigo: r.cat_codigo, nombre: r.cat_nombre },
+      total_vendido: Number(r.total_vendido),
+    }))
+
+    // Si faltan para completar el limit, rellenar con productos activos (no MKT)
+    if (masVendidos.length < limit) {
+      const yaIds = masVendidos.map(p => p.id)
+      const relleno = await Producto.findAll({
+        where: { activo: true, ...(yaIds.length ? { id: { [Op.notIn]: yaIds } } : {}) },
+        include: [{
+          model: Categoria, as: 'categoria',
+          attributes: ['id', 'codigo', 'nombre'],
+          where: { codigo: { [Op.ne]: 'MKT' } },
+          required: true,
+        }],
+        order: [['nombre', 'ASC']],
+        limit: limit - masVendidos.length,
+      })
+      masVendidos = masVendidos.concat(relleno.map(p => p.toJSON()))
+    }
+
+    res.json(masVendidos)
+  } catch (err) {
+    console.error('mas-vendidos:', err)
     res.status(500).json({ error: err.message })
   }
 })
