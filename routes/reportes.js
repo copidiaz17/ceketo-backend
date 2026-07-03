@@ -58,7 +58,11 @@ router.get('/', async (req, res) => {
     })
 
     const pedidos = await Pedido.findAll({
-      where: rangoFecha ? { fecha: rangoFecha } : {},
+      where: {
+        ...(rangoFecha ? { fecha: rangoFecha } : {}),
+        venta_id: null,                    // ← ya facturados como venta: se cuentan como venta (evita el duplicado)
+        estado: { [Op.ne]: 'cancelado' },  // los rechazados no son ventas
+      },
       include: [{ model: PedidoItem, as: 'items', include: [{ ...inclProd }] }],
       order: [['fecha', 'DESC']],
       limit: 2000,
