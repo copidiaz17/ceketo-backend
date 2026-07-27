@@ -52,6 +52,7 @@ import reportesRouter      from './routes/reportes.js'
 import insumosRouter       from './routes/insumos.js'
 import loteCostosRouter    from './routes/loteCostos.js'
 import usuariosRouter      from './routes/usuarios.js'
+import { candadoPorRol } from './middleware/roles.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -76,6 +77,10 @@ app.use('/api', rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones. Intentá en un minuto.' },
 }))
+
+// Cada rol solo llega a lo que su pantalla usa (ver middleware/roles.js).
+// Va ANTES de las rutas para que no dependa de que el menú lo esconda.
+app.use('/api', candadoPorRol)
 
 // API
 app.use('/api/productos',  productosRouter)
@@ -177,6 +182,19 @@ async function start() {
       } else {
         console.warn('⚠ venta_id pedidos:', e.message)
       }
+    }
+
+    // Rol 'contenido' para la community manager. sync() no toca los ENUM,
+    // así que hay que ampliarlo a mano. Es idempotente: repetirlo no rompe nada.
+    try {
+      await sequelize.query(`
+        ALTER TABLE usuarios
+        MODIFY COLUMN rol ENUM('admin','fabrica','ventas','contenido')
+        NOT NULL DEFAULT 'fabrica'
+      `)
+      console.log('✓ Rol contenido disponible')
+    } catch (e) {
+      console.warn('⚠ rol contenido:', e.message)
     }
 
     // Seed de insumos base (solo si no existen por nombre)
