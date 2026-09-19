@@ -214,7 +214,9 @@ router.put('/:id/ajuste-stock', requireAuth, async (req, res) => {
     const producto = await Producto.findByPk(req.params.id)
     if (!producto) return res.status(404).json({ error: 'Producto no encontrado' })
 
-    const { stock_nuevo, observacion, usuario } = req.body
+    const { stock_nuevo, observacion } = req.body
+    // Quién hizo el ajuste: el usuario con el que inició sesión (viene en el token, no lo manda la pantalla)
+    const usuario = req.admin?.usuario || null
     if (stock_nuevo === undefined || stock_nuevo === null || stock_nuevo === '')
       return res.status(400).json({ error: 'stock_nuevo es requerido' })
 
@@ -230,7 +232,7 @@ router.put('/:id/ajuste-stock', requireAuth, async (req, res) => {
       stock_nuevo:    stockNuevo,
       diferencia,
       observacion:    observacion || null,
-      usuario:        usuario || null,
+      usuario,
     })
 
     res.json({ ok: true, ajuste, stock: stockNuevo })
