@@ -14,6 +14,10 @@ const Pedido = sequelize.define('Pedido', {
   total:        { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   nota:         { type: DataTypes.STRING(500) },
   venta_id:     { type: DataTypes.INTEGER, allowNull: true },   // venta generada al confirmar en el POS
+  // ¿Ya llegó el WhatsApp del cliente? El checkout crea el pedido ANTES de que el cliente toque
+  // "Enviar" en WhatsApp, y si se arrepiente el pedido quedaba colgado en "pendientes".
+  // Los pedidos web nacen en false; en la caja se marcan cuando llega el mensaje.
+  whatsapp_recibido: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   fecha:        { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
 }, { tableName: 'pedidos', timestamps: false })
 

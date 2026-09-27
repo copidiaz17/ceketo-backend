@@ -32,8 +32,8 @@ router.get('/dashboard', async (req, res) => {
     const totalHoy     = ventasHoy.reduce((a, v) => a + parseFloat(v.total), 0)
     const cantidadHoy  = ventasHoy.length
 
-    // Pedidos online pendientes
-    const pedidosPendientes = await Pedido.count({ where: { estado: 'pendiente' } })
+    // Pedidos online pendientes (solo los que ya mandaron el WhatsApp; los que no, no cuentan)
+    const pedidosPendientes = await Pedido.count({ where: { estado: 'pendiente', whatsapp_recibido: true } })
 
     // Productos con stock bajo (< 5)
     const stockBajo = await Producto.findAll({

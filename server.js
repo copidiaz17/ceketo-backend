@@ -184,6 +184,22 @@ async function start() {
       }
     }
 
+    // Pedidos web: si ya llegó el WhatsApp del cliente. Los pedidos existentes quedan en 1
+    // (ya fueron atendidos); los nuevos del checkout nacen en 0 (ver routes/pedidos.js).
+    try {
+      await sequelize.query(`
+        ALTER TABLE pedidos
+        ADD COLUMN whatsapp_recibido TINYINT(1) NOT NULL DEFAULT 1
+      `)
+      console.log('✓ Columna whatsapp_recibido agregada a pedidos')
+    } catch (e) {
+      if (e.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('✓ Columna whatsapp_recibido ya existe')
+      } else {
+        console.warn('⚠ whatsapp_recibido pedidos:', e.message)
+      }
+    }
+
     // Rol 'contenido' para la community manager. sync() no toca los ENUM,
     // así que hay que ampliarlo a mano. Es idempotente: repetirlo no rompe nada.
     try {

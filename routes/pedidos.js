@@ -95,8 +95,9 @@ router.post('/', async (req, res) => {
       itemsVal.push({ producto_id: item.producto_id, cantidad: item.cantidad, precio_unit: precio, subtotal })
     }
 
+    // Nace "esperando WhatsApp": entra a Pendientes recién cuando en la caja confirman que llegó el mensaje
     const pedido = await Pedido.create(
-      { nombre, telefono, email, direccion, localidad, metodo_pago, tipo_entrega, nota, total },
+      { nombre, telefono, email, direccion, localidad, metodo_pago, tipo_entrega, nota, total, whatsapp_recibido: false },
       { transaction: t }
     )
     await PedidoItem.bulkCreate(
@@ -111,6 +112,18 @@ router.post('/', async (req, res) => {
   } catch (err) {
     await t.rollback()
     res.status(400).json({ error: err.message })
+  }
+})
+
+// PATCH /api/pedidos/:id/whatsapp  (admin/ventas) — llegó el WhatsApp del cliente: pasa a Pendientes
+router.patch('/:id/whatsapp', requireAuth, async (req, res) => {
+  try {
+    const pedido = await Pedido.findByPk(req.params.id)
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' })
+    await pedido.update({ whatsapp_recibido: true })
+    res.json(pedido)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 
