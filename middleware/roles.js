@@ -14,6 +14,8 @@ import jwt from 'jsonwebtoken'
 
 // Rutas que puede usar cualquiera que haya iniciado sesión
 const COMUNES = [
+  // Loguearse siempre se puede, aunque el navegador mande la sesión vieja de otro usuario con otro rol
+  { metodos: ['POST'], ruta: /^\/auth\/login$/ },
   { metodos: ['GET'], ruta: /^\/auth\/me$/ },
   { metodos: ['GET'], ruta: /^\/admin\/stock-bajo\// },        // el contador del menú
   // La pantalla de Configuración. `usuarios.js` ya decide por su cuenta
