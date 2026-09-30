@@ -200,6 +200,22 @@ async function start() {
       }
     }
 
+    // Encargos con seña: fecha de entrega, seña y venta de la seña (pedidos) + seña aplicada (ventas)
+    for (const [tabla, col, def] of [
+      ['pedidos', 'fecha_entrega', 'DATE NULL'],
+      ['pedidos', 'sena_monto', 'DECIMAL(10,2) NULL'],
+      ['pedidos', 'sena_venta_id', 'INT NULL'],
+      ['ventas', 'sena_aplicada', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
+    ]) {
+      try {
+        await sequelize.query(`ALTER TABLE ${tabla} ADD COLUMN ${col} ${def}`)
+        console.log(`✓ Columna ${col} agregada a ${tabla}`)
+      } catch (e) {
+        if (e.original?.code === 'ER_DUP_FIELDNAME') console.log(`✓ Columna ${col} ya existe en ${tabla}`)
+        else console.warn(`⚠ ${col} ${tabla}:`, e.message)
+      }
+    }
+
     // Rol 'contenido' para la community manager. sync() no toca los ENUM,
     // así que hay que ampliarlo a mano. Es idempotente: repetirlo no rompe nada.
     try {

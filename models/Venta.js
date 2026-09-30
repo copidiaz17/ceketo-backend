@@ -12,6 +12,8 @@ const Venta = sequelize.define('Venta', {
   monto_pago2:  { type: DataTypes.DECIMAL(10, 2), allowNull: true },
   descuento:    { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },
   costo_envio:  { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
+  // Encargos: seña que ya se cobró antes (en otra venta) y se descuenta del total de esta
+  sena_aplicada: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
 }, { tableName: 'ventas', timestamps: false })
 
 export default Venta

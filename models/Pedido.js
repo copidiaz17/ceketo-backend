@@ -18,6 +18,11 @@ const Pedido = sequelize.define('Pedido', {
   // "Enviar" en WhatsApp, y si se arrepiente el pedido quedaba colgado en "pendientes".
   // Los pedidos web nacen en false; en la caja se marcan cuando llega el mensaje.
   whatsapp_recibido: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  // Encargos (postres a pedido): día de entrega elegido en el calendario y seña.
+  // La seña la paga el cliente con el método de `metodo_pago` (transferencia o efectivo en el local).
+  fecha_entrega: { type: DataTypes.DATEONLY, allowNull: true },
+  sena_monto:    { type: DataTypes.DECIMAL(10, 2), allowNull: true },   // seña que declaró / se cobró
+  sena_venta_id: { type: DataTypes.INTEGER, allowNull: true },          // venta que registró la seña en caja
   fecha:        { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
 }, { tableName: 'pedidos', timestamps: false })
 

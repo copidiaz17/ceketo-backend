@@ -6,6 +6,7 @@ import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
 import MovimientoCuenta from '../models/MovimientoCuenta.js'
 import CuentaCorriente from '../models/CuentaCorriente.js'
+import Pedido from '../models/Pedido.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -47,7 +48,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const { items, tipo = 'local', nota, metodo_pago, metodo_pago2, monto_pago2, descuento = 0, fecha, cuenta_id, costo_envio = 0 } = req.body
+    const { items, tipo = 'local', nota, metodo_pago, metodo_pago2, monto_pago2, descuento = 0, fecha, cuenta_id, costo_envio = 0, sena_aplicada = 0 } = req.body
     // items = [{ producto_id, cantidad, precio_unit }]
     if (!items || !items.length) return res.status(400).json({ error: 'Sin items' })
 
@@ -69,7 +70,11 @@ router.post('/', async (req, res) => {
 
     const pct = Math.min(Math.max(parseFloat(descuento) || 0, 0), 100)
     const envio = Math.max(parseFloat(costo_envio) || 0, 0)
-    const totalFinal = parseFloat((total - (total * pct / 100) + envio).toFixed(2))
+    // Encargos: la seña ya se cobró en otra venta → acá se cobra solo el saldo
+    const sena = Math.max(parseFloat(sena_aplicada) || 0, 0)
+    const bruto = total - (total * pct / 100) + envio
+    if (sena > bruto + 0.01) throw new Error('La seña no puede ser mayor que el total de la venta')
+    const totalFinal = parseFloat((bruto - sena).toFixed(2))
     const fechaVenta = fecha
       ? new Date(`${fecha}T12:00:00-03:00`)
       : new Date()
@@ -79,7 +84,7 @@ router.post('/', async (req, res) => {
       metodo_pago: metodo_pago || null,
       metodo_pago2: metodo_pago2 || null,
       monto_pago2: montoPago2,
-      descuento: pct, costo_envio: envio, fecha: fechaVenta,
+      descuento: pct, costo_envio: envio, fecha: fechaVenta, sena_aplicada: sena,
     }, { transaction: t })
     await VentaItem.bulkCreate(
       itemsValidados.map(i => ({ ...i, venta_id: venta.id })),
@@ -126,6 +131,8 @@ router.delete('/:id', async (req, res) => {
       if (producto) await producto.update({ stock: producto.stock + parseInt(item.cantidad) }, { transaction: t })
     }
 
+    // Si era la venta de la seña de un encargo, el encargo vuelve a quedar con la seña sin registrar
+    await Pedido.update({ sena_venta_id: null }, { where: { sena_venta_id: venta.id }, transaction: t })
     await VentaItem.destroy({ where: { venta_id: venta.id }, transaction: t })
     await venta.destroy({ transaction: t })
     await t.commit()

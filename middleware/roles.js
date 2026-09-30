@@ -50,6 +50,7 @@ const PERMISOS = {
     { metodos: ['GET', 'POST', 'PATCH', 'DELETE'], ruta: /^\/ventas(\/|$|\?)/ },
     { metodos: ['GET', 'POST', 'PUT', 'DELETE'],   ruta: /^\/cuentas(\/|$|\?)/ },
     { metodos: ['GET', 'PATCH'], ruta: /^\/pedidos(\/|$|\?)/ },
+    { metodos: ['POST'], ruta: /^\/pedidos\/\d+\/sena$/ },   // registrar la seña de un encargo
   ],
 }
 
