@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import bcrypt from 'bcryptjs'
 import { fileURLToPath } from 'url'
@@ -64,6 +65,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.set('trust proxy', 1)
 app.use(cors({ origin: allowedOrigins, credentials: true }))
+app.use(compression())   // gzip: el JSON de Reportes baja de ~9 MB a menos de 1 MB
 app.use(express.json())
 
 // Archivos subidos (persistentes)

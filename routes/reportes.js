@@ -54,7 +54,7 @@ router.get('/', async (req, res) => {
       where: rangoFecha ? { fecha: rangoFecha } : {},
       include: [{ model: VentaItem, as: 'items', include: [inclProd] }],
       order: [['fecha', 'DESC']],
-      limit: 2000,
+      limit: 20000,   // ~1.000 ventas por mes: alcanza para más de un año
     })
 
     const pedidos = await Pedido.findAll({
@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
       },
       include: [{ model: PedidoItem, as: 'items', include: [{ ...inclProd }] }],
       order: [['fecha', 'DESC']],
-      limit: 2000,
+      limit: 20000,   // ~1.000 ventas por mes: alcanza para más de un año
     })
 
     function filtrarItems(items) {
@@ -228,7 +228,8 @@ router.get('/extras', async (req, res) => {
       // ── Stock actual ─────────────────────────────────────────────
       Producto.findAll({
         where: { activo: true },
-        attributes: ['id', 'codigo', 'nombre', 'precio', 'stock', 'precio_costo'],
+        // (no hay precio de costo en la base: pedir 'precio_costo' hacía fallar la consulta y el stock salía vacío)
+        attributes: ['id', 'codigo', 'nombre', 'precio', 'stock'],
         include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
         order: [['nombre', 'ASC']],
       }),
@@ -292,8 +293,7 @@ router.get('/extras', async (req, res) => {
     // ── Calcular valorización de stock ────────────────────────────
     let stockValorCosto = 0, stockValorVenta = 0
     for (const p of stock) {
-      const cant = Number(p.stock || 0)
-      stockValorCosto += cant * Number(p.precio_costo || 0)
+      const cant = Math.max(Number(p.stock || 0), 0)   // el stock negativo no resta valor
       stockValorVenta += cant * Number(p.precio      || 0)
     }
 
