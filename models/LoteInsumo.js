@@ -8,6 +8,8 @@ const LoteInsumo = sequelize.define('LoteInsumo', {
   insumo_id:      { type: DataTypes.INTEGER, allowNull: false, references: { model: Insumo, key: 'id' } },
   cantidad:       { type: DataTypes.DECIMAL(12, 3), allowNull: false },
   costo_unitario: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  // true = ya se descontó del stock del insumo (los lotes anteriores al control de stock quedan en false)
+  descontado:     { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 }, { tableName: 'lote_insumos', timestamps: false })
 
 LoteInsumo.belongsTo(Insumo, { foreignKey: 'insumo_id', as: 'insumo' })

@@ -13,7 +13,7 @@ router.use(requireAuth)
 
 const CATEGORIAS = [
   'Materia Prima', 'Alquiler', 'Servicios',
-  'Sueldos', 'Mantenimiento', 'Packaging', 'Otros',
+  'Sueldos', 'Mantenimiento', 'Packaging', 'Mercadería para reventa', 'Otros',
 ]
 
 // Multer — comprobantes
@@ -133,6 +133,7 @@ router.put('/:id', upload.single('comprobante'), async (req, res) => {
   try {
     const gasto = await Gasto.findByPk(req.params.id)
     if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' })
+    if (gasto.compra_id) return res.status(400).json({ error: `Este gasto es de la compra #${gasto.compra_id}: se corrige desde Compras (anulándola y cargándola de nuevo)` })
 
     const { fecha, categoria, descripcion, monto, proveedor, es_factura, alicuota_iva, metodo_pago } = req.body
     if (categoria && !CATEGORIAS.includes(categoria))
@@ -172,6 +173,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const gasto = await Gasto.findByPk(req.params.id)
     if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' })
+    if (gasto.compra_id) return res.status(400).json({ error: `Este gasto es de la compra #${gasto.compra_id}: se borra anulando la compra en Compras` })
 
     // Borrar comprobante del disco
     if (gasto.comprobante) {

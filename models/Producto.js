@@ -12,7 +12,13 @@ const Producto = sequelize.define('Producto', {
   stock:         { type: DataTypes.INTEGER, defaultValue: 0 },
   activo:        { type: DataTypes.BOOLEAN, defaultValue: true },
   imagen:        { type: DataTypes.STRING(255) },
-}, { tableName: 'productos', timestamps: false })
+  // Costo de compra (productos de reventa). NO se publica: el defaultScope lo saca de toda consulta
+  // (la tienda usa las mismas rutas). Para leerlo: Producto.unscoped()
+  precio_costo:  { type: DataTypes.DECIMAL(12, 2), allowNull: true },
+}, {
+  tableName: 'productos', timestamps: false,
+  defaultScope: { attributes: { exclude: ['precio_costo'] } },
+})
 
 Producto.belongsTo(Categoria, { foreignKey: 'categoria_id', as: 'categoria' })
 Categoria.hasMany(Producto,   { foreignKey: 'categoria_id', as: 'productos' })

@@ -7,6 +7,8 @@ import Produccion from '../models/Produccion.js'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
 import Pedido from '../models/Pedido.js'
+import Compra from '../models/Compra.js'
+import CompraItem from '../models/CompraItem.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -150,8 +152,31 @@ router.get('/movimientos', async (req, res) => {
       limit: 500,
     })
 
+    // Compras de productos (vigentes) = entradas de stock
+    const whereCompra = { estado: 'vigente' }
+    if (fecha_desde) whereCompra.fecha = { ...whereCompra.fecha, [Op.gte]: fecha_desde }
+    if (fecha_hasta) whereCompra.fecha = { ...whereCompra.fecha, [Op.lte]: fecha_hasta }
+    const compras = await CompraItem.findAll({
+      where: { tipo: 'producto', ...(producto_id ? { producto_id } : {}) },
+      include: [
+        includeProducto,
+        { model: Compra, as: 'compra', attributes: ['id', 'fecha', 'proveedor'], where: whereCompra, required: true },
+      ],
+      order: [['id', 'DESC']],
+      limit: 500,
+    })
+
     // Unificar y ordenar por fecha
     const movimientos = [
+      ...compras.map(c => ({
+        tipo:        'entrada',
+        fecha:       c.compra?.fecha,
+        solo_fecha:  true,
+        cantidad:    Number(c.cantidad),
+        producto:    c.producto,
+        referencia:  `Compra #${c.compra?.id} — ${c.compra?.proveedor}`,
+        nota:        null,
+      })),
       ...entradas.map(e => ({
         tipo:        'entrada',
         fecha:       e.fecha,   // DATEONLY: "YYYY-MM-DD"

@@ -182,6 +182,7 @@ router.delete('/:id/movimientos/:movId', async (req, res) => {
       transaction: t,
     })
     if (!mov) { await t.rollback(); return res.status(404).json({ error: 'Movimiento no encontrado' }) }
+    if (mov.compra_id) { await t.rollback(); return res.status(400).json({ error: `Es el cargo de la compra #${mov.compra_id}: se borra anulando la compra en Compras` }) }
 
     // Si tenía gasto asociado, eliminarlo
     if (mov.gasto_id) {

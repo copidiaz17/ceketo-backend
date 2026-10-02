@@ -12,6 +12,7 @@ const MovimientoCuenta = sequelize.define('MovimientoCuenta', {
   metodo_pago:{ type: DataTypes.ENUM('efectivo', 'transferencia', 'debito', 'credito', 'qr'), allowNull: true },
   gasto_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia al gasto auto-creado
   venta_id:   { type: DataTypes.INTEGER, allowNull: true }, // referencia a la venta auto-creada
+  compra_id:  { type: DataTypes.INTEGER, allowNull: true }, // cargo generado por una compra a cuenta
 }, { tableName: 'movimientos_cuenta', timestamps: true })
 
 CuentaCorriente.hasMany(MovimientoCuenta, { foreignKey: 'cuenta_id', as: 'movimientos' })

@@ -5,7 +5,9 @@ const Insumo = sequelize.define('Insumo', {
   id:             { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   nombre:         { type: DataTypes.STRING(200), allowNull: false },
   unidad:         { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'unidad' },
-  costo_unitario: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+  costo_unitario: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },   // se actualiza con la última compra
+  stock:          { type: DataTypes.DECIMAL(12, 3), allowNull: false, defaultValue: 0 },   // sube con compras, baja con producción
+  stock_minimo:   { type: DataTypes.DECIMAL(12, 3), allowNull: false, defaultValue: 0 },   // aviso de reposición
   activo:         { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
 }, { tableName: 'insumos', timestamps: false })
 

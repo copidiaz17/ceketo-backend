@@ -10,6 +10,8 @@ import Gasto      from '../models/Gasto.js'
 import Produccion from '../models/Produccion.js'
 import Caja            from '../models/Caja.js'
 import MovimientoCaja  from '../models/MovimientoCaja.js'
+import Compra          from '../models/Compra.js'
+import CompraItem      from '../models/CompraItem.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -208,7 +210,7 @@ router.get('/extras', async (req, res) => {
     const whereUTC  = rangoUTC  ? { fecha_apertura: rangoUTC } : {}
 
     // Ejecutar las 4 queries en paralelo, de forma independiente
-    const [gastosR, produccionR, stockR, cajasR] = await Promise.allSettled([
+    const [gastosR, produccionR, stockR, cajasR, comprasR] = await Promise.allSettled([
 
       // ── Gastos ──────────────────────────────────────────────────
       Gasto.findAll({ where: whereDate, order: [['fecha', 'DESC']] }),
@@ -225,11 +227,10 @@ router.get('/extras', async (req, res) => {
         limit: 10000,   // ~330 filas por mes: alcanza para más de 2 años
       }),
 
-      // ── Stock actual ─────────────────────────────────────────────
-      Producto.findAll({
+      // ── Stock actual (con el costo, que se carga con las compras) ─
+      Producto.unscoped().findAll({
         where: { activo: true },
-        // (no hay precio de costo en la base: pedir 'precio_costo' hacía fallar la consulta y el stock salía vacío)
-        attributes: ['id', 'codigo', 'nombre', 'precio', 'stock'],
+        attributes: ['id', 'codigo', 'nombre', 'precio', 'stock', 'precio_costo'],
         include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
         order: [['nombre', 'ASC']],
       }),
@@ -240,7 +241,17 @@ router.get('/extras', async (req, res) => {
         order: [['fecha_apertura', 'DESC']],
         limit: 60,
       }),
+
+      // ── Compras vigentes del período ─────────────────────────────
+      Compra.findAll({
+        where: { ...whereDate, estado: 'vigente' },
+        include: [{ model: CompraItem, as: 'items' }],
+        order: [['fecha', 'ASC'], ['id', 'ASC']],
+        limit: 5000,
+      }),
     ])
+    if (comprasR.status === 'rejected') console.error('extras/compras:', comprasR.reason?.message)
+    const compras = comprasR.status === 'fulfilled' ? comprasR.value : []
 
     // Loguear errores sin abortar la respuesta
     if (gastosR.status    === 'rejected') console.error('extras/gastos:', gastosR.reason?.message)
@@ -294,6 +305,7 @@ router.get('/extras', async (req, res) => {
     let stockValorCosto = 0, stockValorVenta = 0
     for (const p of stock) {
       const cant = Math.max(Number(p.stock || 0), 0)   // el stock negativo no resta valor
+      stockValorCosto += cant * Number(p.precio_costo || 0)
       stockValorVenta += cant * Number(p.precio      || 0)
     }
 
@@ -345,6 +357,7 @@ router.get('/extras', async (req, res) => {
       stockValorVenta,
       cajas,
       resumenMovimientos,
+      compras,
     })
   } catch (err) {
     console.error(err)

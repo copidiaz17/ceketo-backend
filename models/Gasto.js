@@ -12,6 +12,7 @@ const Gasto = sequelize.define('Gasto', {
       'Sueldos',
       'Mantenimiento',
       'Packaging',
+      'Mercadería para reventa',
       'Otros'
     ),
     allowNull: false,
@@ -24,6 +25,7 @@ const Gasto = sequelize.define('Gasto', {
   es_factura:   { type: DataTypes.BOOLEAN, defaultValue: false },
   alicuota_iva: { type: DataTypes.DECIMAL(5, 2), allowNull: true },  // 10.5, 21, 27
   iva_monto:    { type: DataTypes.DECIMAL(12, 2), allowNull: true },  // IVA calculado
+  compra_id:    { type: DataTypes.INTEGER, allowNull: true },          // gasto generado por una compra (se maneja desde Compras)
 }, { tableName: 'gastos', timestamps: true })
 
 export default Gasto

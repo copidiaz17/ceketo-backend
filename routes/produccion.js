@@ -3,6 +3,8 @@ import { sequelize } from '../database.js'
 import Produccion from '../models/Produccion.js'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
+import LoteInsumo from '../models/LoteInsumo.js'
+import { moverStockInsumos } from './loteCostos.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -112,6 +114,15 @@ router.delete('/lote/:lote_id', async (req, res) => {
       const producto = await Producto.findByPk(reg.producto_id, { transaction: t })
       if (producto) await producto.update({ stock: Math.max(0, producto.stock - parseInt(reg.cantidad)) }, { transaction: t })
       await reg.destroy({ transaction: t })
+    }
+
+    // Los insumos que se habían descontado por este lote vuelven al stock
+    if (!loteParam.startsWith('fecha-')) {
+      const usados = await LoteInsumo.findAll({ where: { lote_id: loteParam }, transaction: t })
+      const antes = {}
+      for (const li of usados) if (li.descontado) antes[li.insumo_id] = (antes[li.insumo_id] || 0) + Number(li.cantidad)
+      await moverStockInsumos(antes, {}, `Lote ${loteParam.slice(0, 8)} eliminado`, req.admin?.usuario, t)
+      await LoteInsumo.destroy({ where: { lote_id: loteParam }, transaction: t })
     }
 
     await t.commit()

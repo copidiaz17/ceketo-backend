@@ -100,6 +100,17 @@ router.get('/mas-vendidos', async (req, res) => {
   }
 })
 
+// GET /api/productos/costos  (solo admin) — precio de costo de cada producto (no sale en las rutas públicas)
+router.get('/costos', requireAuth, async (req, res) => {
+  try {
+    if (req.admin?.rol && req.admin.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador' })
+    const costos = await Producto.unscoped().findAll({ attributes: ['id', 'precio_costo'] })
+    res.json(costos)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/productos/barcode/:codigo  (admin)
 router.get('/barcode/:codigo', requireAuth, async (req, res) => {
   try {
@@ -162,6 +173,8 @@ router.post('/', requireAuth, async (req, res) => {
       precio:  precio  ?? 0,
       stock:   stock   ?? 0,
       activo:  activo  ?? true,
+      ...((!req.admin?.rol || req.admin.rol === 'admin') && req.body.precio_costo != null && req.body.precio_costo !== ''
+        ? { precio_costo: Number(req.body.precio_costo) } : {}),
     })
     const productoConCat = await Producto.findByPk(producto.id, {
       include: [{ model: Categoria, as: 'categoria', attributes: ['id', 'codigo', 'nombre'] }],
@@ -200,6 +213,10 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (codigo        !== undefined) updates.codigo        = codigo
     if (codigo_barras !== undefined) updates.codigo_barras = codigo_barras
     if (categoria_id  !== undefined) updates.categoria_id  = categoria_id
+    // costo: solo el admin (las compras lo actualizan solas; esto es para corregirlo a mano)
+    if (req.body.precio_costo !== undefined && (!req.admin?.rol || req.admin.rol === 'admin')) {
+      updates.precio_costo = req.body.precio_costo === '' || req.body.precio_costo === null ? null : Number(req.body.precio_costo)
+    }
     // stock NO se actualiza aquí — solo via /ajuste-stock o produccion
     await producto.update(updates)
     res.json(producto)

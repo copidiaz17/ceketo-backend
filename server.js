@@ -33,6 +33,9 @@ import './models/Proveedor.js'
 import './models/Insumo.js'
 import './models/LoteInsumo.js'
 import './models/LoteHoras.js'
+import './models/MovimientoInsumo.js'
+import './models/Compra.js'
+import './models/CompraItem.js'
 import Usuario from './models/Usuario.js'
 import Insumo  from './models/Insumo.js'
 
@@ -53,6 +56,7 @@ import reportesRouter      from './routes/reportes.js'
 import insumosRouter       from './routes/insumos.js'
 import loteCostosRouter    from './routes/loteCostos.js'
 import usuariosRouter      from './routes/usuarios.js'
+import comprasRouter       from './routes/compras.js'
 import { candadoPorRol } from './middleware/roles.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -101,6 +105,7 @@ app.use('/api/admin/reportes', reportesRouter)
 app.use('/api/insumos',       insumosRouter)
 app.use('/api/lote-costos',   loteCostosRouter)
 app.use('/api/usuarios',      usuariosRouter)
+app.use('/api/compras',       comprasRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -216,6 +221,35 @@ async function start() {
         if (e.original?.code === 'ER_DUP_FIELDNAME') console.log(`✓ Columna ${col} ya existe en ${tabla}`)
         else console.warn(`⚠ ${col} ${tabla}:`, e.message)
       }
+    }
+
+    // Compras: stock de insumos, costo de productos y vínculos de gastos/cuentas con la compra
+    for (const [tabla, col, def] of [
+      ['insumos', 'stock', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],
+      ['insumos', 'stock_minimo', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],
+      ['lote_insumos', 'descontado', 'TINYINT(1) NOT NULL DEFAULT 0'],
+      ['productos', 'precio_costo', 'DECIMAL(12,2) NULL'],
+      ['gastos', 'compra_id', 'INT NULL'],
+      ['movimientos_cuenta', 'compra_id', 'INT NULL'],
+    ]) {
+      try {
+        await sequelize.query(`ALTER TABLE ${tabla} ADD COLUMN ${col} ${def}`)
+        console.log(`✓ Columna ${col} agregada a ${tabla}`)
+      } catch (e) {
+        if (e.original?.code === 'ER_DUP_FIELDNAME') console.log(`✓ Columna ${col} ya existe en ${tabla}`)
+        else console.warn(`⚠ ${col} ${tabla}:`, e.message)
+      }
+    }
+    // Rubro de gasto nuevo para lo que se compra para revender (sync() no amplía los ENUM)
+    try {
+      await sequelize.query(`
+        ALTER TABLE gastos MODIFY COLUMN categoria
+        ENUM('Materia Prima','Alquiler','Servicios','Sueldos','Mantenimiento','Packaging','Mercadería para reventa','Otros')
+        NOT NULL
+      `)
+      console.log('✓ Rubro "Mercadería para reventa" disponible en gastos')
+    } catch (e) {
+      console.warn('⚠ rubro mercadería:', e.message)
     }
 
     // Rol 'contenido' para la community manager. sync() no toca los ENUM,
