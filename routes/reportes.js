@@ -218,11 +218,11 @@ router.get('/extras', async (req, res) => {
         where: whereDate,
         include: [{
           model: Producto, as: 'producto',
-          attributes: ['id', 'codigo', 'nombre'],
+          attributes: ['id', 'codigo', 'nombre', 'precio'],
           include: [{ model: Categoria, as: 'categoria', attributes: ['nombre'] }],
         }],
         order: [['fecha', 'DESC'], ['id', 'DESC']],
-        limit: 1000,
+        limit: 10000,   // ~330 filas por mes: alcanza para más de 2 años
       }),
 
       // ── Stock actual ─────────────────────────────────────────────
@@ -281,7 +281,7 @@ router.get('/extras', async (req, res) => {
     for (const r of produccion) {
       const key = r.lote_id || `fecha-${r.fecha}`
       if (!lotesMap[key]) lotesMap[key] = { lote_id: key, fecha: r.fecha, nota: r.nota, items: [], total_unidades: 0 }
-      lotesMap[key].items.push({ producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre, codigo: r.producto?.codigo, cantidad: Number(r.cantidad) })
+      lotesMap[key].items.push({ producto: r.producto?.nombre, categoria: r.producto?.categoria?.nombre, codigo: r.producto?.codigo, precio: Number(r.producto?.precio || 0), cantidad: Number(r.cantidad) })
       lotesMap[key].total_unidades += Number(r.cantidad)
       totalUnidadesProducidas      += Number(r.cantidad)
       const pk = r.producto?.nombre || String(r.producto_id)
