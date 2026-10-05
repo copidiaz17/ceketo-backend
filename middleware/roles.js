@@ -38,7 +38,8 @@ const PERMISOS = {
     { metodos: ['PUT'], ruta: /^\/productos\/\d+\/(ajuste-stock|stock)$/ },
     { metodos: ['GET'], ruta: /^\/categorias(\/|$|\?)/ },
     { metodos: ['GET', 'POST', 'PUT', 'DELETE'], ruta: /^\/produccion(\/|$|\?)/ },
-    { metodos: ['GET', 'POST'], ruta: /^\/lote-costos\/\d+$/ },
+    // El código del lote es un UUID (letras, números y guiones), no un número
+    { metodos: ['GET', 'POST'], ruta: /^\/lote-costos\/[A-Za-z0-9-]+$/ },
     { metodos: ['GET'], ruta: /^\/insumos(\/|$|\?)/ },
   ],
 

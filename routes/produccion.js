@@ -4,7 +4,7 @@ import Produccion from '../models/Produccion.js'
 import Producto from '../models/Producto.js'
 import Categoria from '../models/Categoria.js'
 import LoteInsumo from '../models/LoteInsumo.js'
-import { moverStockInsumos } from './loteCostos.js'
+import { moverStockInsumos, guardarCostosLote } from './loteCostos.js'
 import { requireAuth } from './auth.js'
 
 const router = Router()
@@ -67,8 +67,8 @@ router.get('/lotes', async (req, res) => {
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
   try {
-    const { items, fecha, nota, lote_id } = req.body
-    if (!items || !items.length) return res.status(400).json({ error: 'Sin items' })
+    const { items, fecha, nota, lote_id, costos } = req.body
+    if (!items || !items.length) { await t.rollback(); return res.status(400).json({ error: 'Sin items' }) }
 
     const registros = []
     for (const item of items) {
@@ -86,6 +86,10 @@ router.post('/', async (req, res) => {
       }, { transaction: t })
       registros.push(reg)
     }
+
+    // Horas e insumos del lote en la MISMA transacción: si algo falla no se graba nada
+    // (antes iban en otra llamada y, si fallaba, la producción quedaba grabada sin insumos)
+    if (costos && lote_id) await guardarCostosLote(lote_id, costos, req.admin?.usuario, t)
 
     await t.commit()
     res.status(201).json({ ok: true, registros: registros.length })
