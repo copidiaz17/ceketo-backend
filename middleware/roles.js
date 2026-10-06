@@ -41,6 +41,7 @@ const PERMISOS = {
     // El código del lote es un UUID (letras, números y guiones), no un número
     { metodos: ['GET', 'POST'], ruta: /^\/lote-costos\/[A-Za-z0-9-]+$/ },
     { metodos: ['GET'], ruta: /^\/insumos(\/|$|\?)/ },
+    { metodos: ['POST'], ruta: /^\/insumos$/ },   // crear un insumo nuevo (sin costo: eso lo pone la compra)
   ],
 
   // Ventas: mostrador, cuentas corrientes y stock.

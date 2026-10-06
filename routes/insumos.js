@@ -35,10 +35,19 @@ router.post('/', async (req, res) => {
   try {
     const { nombre, unidad, costo_unitario, stock_minimo } = req.body
     if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' })
+    // Sin repetidos (sin importar mayúsculas ni espacios de más)
+    const limpio = nombre.trim().replace(/\s+/g, ' ')
+    const existente = (await Insumo.findAll()).find(i => i.nombre.trim().replace(/\s+/g, ' ').toLowerCase() === limpio.toLowerCase())
+    if (existente) {
+      return res.status(400).json({ error: existente.activo
+        ? `Ya existe un insumo llamado "${existente.nombre}"`
+        : `Ya existe "${existente.nombre}" pero está desactivado: pedile a la administración que lo active` })
+    }
+    const esAdmin = !req.admin?.rol || req.admin.rol === 'admin'
     const insumo = await Insumo.create({
-      nombre: nombre.trim(),
+      nombre: limpio,
       unidad: unidad?.trim() || 'unidad',
-      costo_unitario: parseFloat(costo_unitario) || 0,
+      costo_unitario: esAdmin ? (parseFloat(costo_unitario) || 0) : 0,   // Fábrica no carga costos
       stock_minimo: parseFloat(stock_minimo) || 0,
     })
     res.status(201).json(insumo)
