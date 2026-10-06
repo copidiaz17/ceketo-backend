@@ -35,6 +35,19 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /api/cuentas/informe — todas las cuentas con sus movimientos (para el informe general en Excel/PDF)
+router.get('/informe', async (req, res) => {
+  try {
+    const cuentas = await CuentaCorriente.findAll({
+      include: [{ model: MovimientoCuenta, as: 'movimientos' }],
+      order: [['nombre', 'ASC'], [{ model: MovimientoCuenta, as: 'movimientos' }, 'fecha', 'ASC'], [{ model: MovimientoCuenta, as: 'movimientos' }, 'id', 'ASC']],
+    })
+    res.json(cuentas)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/cuentas
 router.post('/', async (req, res) => {
   try {
