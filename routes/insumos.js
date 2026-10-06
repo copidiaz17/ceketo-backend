@@ -101,6 +101,50 @@ router.post('/:id/ajuste', async (req, res) => {
   }
 })
 
+// POST /api/insumos/conteo — carga inicial o conteo general: varios insumos de una vez (solo admin)
+// body: { motivo, items: [{ id, stock_nuevo, costo_unitario? }] } — los que vienen vacíos no se tocan
+router.post('/conteo', async (req, res) => {
+  if (req.admin?.rol && req.admin.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador' })
+  const t = await sequelize.transaction()
+  try {
+    const items = Array.isArray(req.body.items) ? req.body.items : []
+    const motivo = (req.body.motivo || 'Carga inicial / conteo').toString().slice(0, 120)
+    let cambiados = 0
+    for (const it of items) {
+      const tieneStock = it.stock_nuevo !== '' && it.stock_nuevo != null
+      const tieneCosto = it.costo_unitario !== '' && it.costo_unitario != null
+      if (!tieneStock && !tieneCosto) continue
+      const insumo = await Insumo.findByPk(it.id, { transaction: t, lock: t.LOCK.UPDATE })
+      if (!insumo) throw new Error(`Insumo ${it.id} no encontrado`)
+      const cambios = {}
+      if (tieneStock) {
+        const nuevo = Number(it.stock_nuevo)
+        if (!(nuevo >= 0)) throw new Error(`${insumo.nombre}: la cantidad tiene que ser 0 o más`)
+        const dif = Math.round((nuevo - Number(insumo.stock)) * 1000) / 1000
+        cambios.stock = nuevo
+        if (dif !== 0) {
+          await MovimientoInsumo.create({
+            insumo_id: insumo.id, tipo: 'ajuste', cantidad: dif, stock_resultante: nuevo,
+            referencia: motivo, usuario: req.admin?.usuario || null,
+          }, { transaction: t })
+        }
+      }
+      if (tieneCosto) {
+        const costo = Number(it.costo_unitario)
+        if (!(costo >= 0)) throw new Error(`${insumo.nombre}: costo inválido`)
+        cambios.costo_unitario = costo
+      }
+      await insumo.update(cambios, { transaction: t })
+      cambiados++
+    }
+    await t.commit()
+    res.json({ ok: true, cambiados })
+  } catch (err) {
+    await t.rollback()
+    res.status(400).json({ error: err.message })
+  }
+})
+
 // GET /api/insumos/:id/movimientos — historial del stock del insumo
 router.get('/:id/movimientos', async (req, res) => {
   try {
