@@ -101,10 +101,13 @@ router.post('/:id/ajuste', async (req, res) => {
   }
 })
 
-// POST /api/insumos/conteo — carga inicial o conteo general: varios insumos de una vez (solo admin)
-// body: { motivo, items: [{ id, stock_nuevo, costo_unitario? }] } — los que vienen vacíos no se tocan
+// POST /api/insumos/conteo — carga inicial o conteo general: varios insumos de una vez
+// body: { motivo, items: [{ id, stock_nuevo, costo_unitario? }] } — los que vienen vacíos no se tocan.
+// Admin y Fábrica (el conteo físico lo hace la fábrica); el costo solo lo cambia el admin.
 router.post('/conteo', async (req, res) => {
-  if (req.admin?.rol && req.admin.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador' })
+  const rol = req.admin?.rol
+  if (rol && !['admin', 'fabrica'].includes(rol)) return res.status(403).json({ error: 'Tu usuario no puede cargar conteos' })
+  const puedeCosto = !rol || rol === 'admin'
   const t = await sequelize.transaction()
   try {
     const items = Array.isArray(req.body.items) ? req.body.items : []
@@ -112,7 +115,7 @@ router.post('/conteo', async (req, res) => {
     let cambiados = 0
     for (const it of items) {
       const tieneStock = it.stock_nuevo !== '' && it.stock_nuevo != null
-      const tieneCosto = it.costo_unitario !== '' && it.costo_unitario != null
+      const tieneCosto = puedeCosto && it.costo_unitario !== '' && it.costo_unitario != null
       if (!tieneStock && !tieneCosto) continue
       const insumo = await Insumo.findByPk(it.id, { transaction: t, lock: t.LOCK.UPDATE })
       if (!insumo) throw new Error(`Insumo ${it.id} no encontrado`)
