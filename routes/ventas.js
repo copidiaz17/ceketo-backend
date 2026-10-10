@@ -44,6 +44,47 @@ router.get('/', async (req, res) => {
   }
 })
 
+// ── Pago dividido y cuenta corriente ────────────────────────────────────────
+// Una venta se puede pagar con 1 o 2 medios (cualquiera, incluida la cuenta corriente).
+// Lo que se paga "a cuenta" se carga en la cuenta del cliente: solo esa parte, no el total.
+const METODOS_VENTA = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cuenta_corriente']
+
+function validarPagos(metodo1, metodo2, monto2, total) {
+  if (metodo1 && !METODOS_VENTA.includes(metodo1)) throw new Error('Método de pago inválido')
+  if (!metodo2) return
+  if (!METODOS_VENTA.includes(metodo2)) throw new Error('Segundo método de pago inválido')
+  if (metodo2 === metodo1) throw new Error('Los dos medios de pago tienen que ser distintos')
+  const m2 = parseFloat(monto2)
+  if (!(m2 > 0) || m2 >= total) throw new Error(`El monto del segundo medio tiene que ser mayor a 0 y menor al total ($${total})`)
+}
+
+// Parte de la venta que queda en cuenta corriente
+function montoACuenta(venta) {
+  const total = parseFloat(venta.total) || 0
+  const m2 = venta.metodo_pago2 ? (parseFloat(venta.monto_pago2) || 0) : 0
+  if (venta.metodo_pago === 'cuenta_corriente') return Math.round((total - m2) * 100) / 100
+  if (venta.metodo_pago2 === 'cuenta_corriente') return m2
+  return 0
+}
+
+// Crea, actualiza o borra el cargo en la cuenta del cliente según cómo quedó pagada la venta
+async function sincronizarCargo(venta, cuenta_id, concepto, t) {
+  const monto = montoACuenta(venta)
+  const existente = await MovimientoCuenta.findOne({ where: { venta_id: venta.id }, transaction: t })
+  if (monto <= 0) {
+    if (existente) await existente.destroy({ transaction: t })
+    return
+  }
+  const cuentaId = cuenta_id || existente?.cuenta_id
+  if (!cuentaId) throw new Error('Elegí el cliente de la cuenta corriente')
+  const cuenta = await CuentaCorriente.findByPk(cuentaId, { transaction: t })
+  if (!cuenta || cuenta.tipo !== 'cliente') throw new Error('La cuenta corriente elegida no es de un cliente')
+  const total = parseFloat(venta.total) || 0
+  const texto = monto < total ? `${concepto} — a cuenta $${monto.toLocaleString('es-AR')} de $${total.toLocaleString('es-AR')}` : concepto
+  if (existente) await existente.update({ cuenta_id: cuentaId, monto, concepto: texto }, { transaction: t })
+  else await MovimientoCuenta.create({ cuenta_id: cuentaId, fecha: venta.fecha, tipo: 'cargo', concepto: texto, monto, venta_id: venta.id }, { transaction: t })
+}
+
 // POST /api/ventas - registrar venta
 router.post('/', async (req, res) => {
   const t = await sequelize.transaction()
@@ -78,6 +119,7 @@ router.post('/', async (req, res) => {
     const fechaVenta = fecha
       ? new Date(`${fecha}T12:00:00-03:00`)
       : new Date()
+    validarPagos(metodo_pago, metodo_pago2, monto_pago2, totalFinal)
     const montoPago2 = metodo_pago2 && monto_pago2 ? parseFloat(monto_pago2) : null
     const venta = await Venta.create({
       tipo, total: totalFinal, nota: nota || null,
@@ -91,23 +133,11 @@ router.post('/', async (req, res) => {
       { transaction: t }
     )
 
-    // Si la venta es a cuenta corriente, registrar el movimiento en la cuenta del cliente
-    if (metodo_pago === 'cuenta_corriente' && cuenta_id) {
-      const cuenta = await CuentaCorriente.findByPk(cuenta_id, { transaction: t })
-      if (cuenta && cuenta.tipo === 'cliente') {
-        const conceptoItems = itemsValidados.length === 1
-          ? `Venta #${venta.id}`
-          : `Venta #${venta.id} (${itemsValidados.length} productos)`
-        await MovimientoCuenta.create({
-          cuenta_id,
-          fecha:    venta.fecha,
-          tipo:     'cargo',
-          concepto: nota || conceptoItems,
-          monto:    totalFinal,
-          venta_id: venta.id,
-        }, { transaction: t })
-      }
-    }
+    // Lo que se paga a cuenta corriente (todo o una parte) se carga en la cuenta del cliente
+    const conceptoItems = itemsValidados.length === 1
+      ? `Venta #${venta.id}`
+      : `Venta #${venta.id} (${itemsValidados.length} productos)`
+    await sincronizarCargo(venta, cuenta_id, nota || conceptoItems, t)
 
     await t.commit()
     res.status(201).json({ ok: true, venta_id: venta.id, total: totalFinal })
@@ -131,6 +161,8 @@ router.delete('/:id', async (req, res) => {
       if (producto) await producto.update({ stock: producto.stock + parseInt(item.cantidad) }, { transaction: t })
     }
 
+    // Si tenía una parte a cuenta corriente, el cargo en la cuenta del cliente se borra (antes quedaba la deuda)
+    await MovimientoCuenta.destroy({ where: { venta_id: venta.id }, transaction: t })
     // Si era la venta de la seña de un encargo, el encargo vuelve a quedar con la seña sin registrar
     await Pedido.update({ sena_venta_id: null }, { where: { sena_venta_id: venta.id }, transaction: t })
     await VentaItem.destroy({ where: { venta_id: venta.id }, transaction: t })
@@ -145,20 +177,25 @@ router.delete('/:id', async (req, res) => {
 
 // PATCH /api/ventas/:id — editar forma de pago
 router.patch('/:id', async (req, res) => {
+  const t = await sequelize.transaction()
   try {
-    const venta = await Venta.findByPk(req.params.id)
-    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' })
-    const { metodo_pago, metodo_pago2, monto_pago2 } = req.body
-    const METODOS = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cuenta_corriente']
-    if (metodo_pago && !METODOS.includes(metodo_pago)) return res.status(400).json({ error: 'Método de pago inválido' })
+    const venta = await Venta.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE })
+    if (!venta) { await t.rollback(); return res.status(404).json({ error: 'Venta no encontrada' }) }
+    const { metodo_pago, metodo_pago2, monto_pago2, cuenta_id } = req.body
+    const m1 = metodo_pago || venta.metodo_pago
+    validarPagos(m1, metodo_pago2 || null, monto_pago2, parseFloat(venta.total))
     await venta.update({
-      metodo_pago:  metodo_pago  || venta.metodo_pago,
+      metodo_pago:  m1,
       metodo_pago2: metodo_pago2 || null,
-      monto_pago2:  monto_pago2  ? parseFloat(monto_pago2) : null,
-    })
+      monto_pago2:  metodo_pago2 && monto_pago2 ? parseFloat(monto_pago2) : null,
+    }, { transaction: t })
+    // Si cambió lo que va a cuenta corriente, el cargo del cliente se ajusta (o se crea / se borra)
+    await sincronizarCargo(venta, cuenta_id, venta.nota || `Venta #${venta.id}`, t)
+    await t.commit()
     res.json({ ok: true, venta })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    await t.rollback()
+    res.status(400).json({ error: err.message })
   }
 })
 
